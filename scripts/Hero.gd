@@ -19,6 +19,13 @@ var preferred_distance: float = 130.0
 var has_halo: bool = false
 var attack_timer: float = 0.0
 var pull_pulse_timer: float = 0.0
+var switch_flash_timer: float = 0.0
+
+const ROGUE_ASSIST_TRIGGER_RATIO := 0.74
+const ROGUE_ASSIST_THREAT_RADIUS := 220.0
+const ROGUE_GUARD_PADDING := 42.0
+const ROGUE_ANCHOR_TOLERANCE := 10.0
+const ROGUE_TOO_CLOSE_MULT := 0.82
 
 func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	kind = hero_kind
@@ -28,48 +35,49 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 		HeroKind.KNIGHT:
 			hero_name = "Knight"
 			body_color = Color(0.3, 0.5, 0.95)
-			max_health = 210.0
-			move_speed = 78.0
+			max_health = 260.0
+			move_speed = 70.0
 			attack_range = 64.0
-			attack_damage = 18.0
+			attack_damage = 21.0
 			attack_cooldown = 0.85
-			body_radius = 20.0
+			body_radius = 21.0
 			preferred_distance = 80.0
 		HeroKind.MAGE:
 			hero_name = "Mage"
 			body_color = Color(0.95, 0.45, 0.75)
-			max_health = 95.0
-			move_speed = 88.0
-			attack_range = 210.0
-			attack_damage = 17.0
-			attack_cooldown = 0.55
+			max_health = 85.0
+			move_speed = 80.0
+			attack_range = 250.0
+			attack_damage = 22.0
+			attack_cooldown = 0.62
 			body_radius = 14.0
-			preferred_distance = 155.0
+			preferred_distance = 185.0
 		HeroKind.ROGUE:
 			hero_name = "Rogue"
 			body_color = Color(0.3, 0.95, 0.65)
-			max_health = 120.0
-			move_speed = 160.0
+			max_health = 110.0
+			move_speed = 195.0
 			attack_range = 76.0
-			attack_damage = 12.0
-			attack_cooldown = 0.38
+			attack_damage = 10.0
+			attack_cooldown = 0.3
 			body_radius = 13.0
 			preferred_distance = 90.0
 
 	health = max_health
 	attack_timer = randf_range(0.15, 0.55)
 	pull_pulse_timer = randf_range(0.25, 0.75)
+	switch_flash_timer = 0.0
 	queue_redraw()
 
-func process_tick(delta: float, enemies: Array[Enemy], heroes: Array[Hero], arena_rect: Rect2) -> void:
+func process_tick(delta: float, enemies: Array[Enemy], heroes: Array[Hero], arena_rect: Rect2, projectile_spawns: Array[Dictionary]) -> void:
 	if health <= 0.0:
 		return
 
 	attack_timer = maxf(0.0, attack_timer - delta)
 
 	var target := _select_movement_target(enemies, heroes)
-	_move_by_role(delta, target, heroes, arena_rect)
-	_try_attack(target, enemies, heroes)
+	_move_by_role(delta, target, heroes, enemies, arena_rect)
+	_try_attack(target, enemies, heroes, projectile_spawns)
 
 func _select_movement_target(enemies: Array[Enemy], heroes: Array[Hero]) -> Enemy:
 	match kind:
@@ -78,14 +86,14 @@ func _select_movement_target(enemies: Array[Enemy], heroes: Array[Hero]) -> Enem
 		HeroKind.MAGE:
 			return _find_nearest_enemy(enemies)
 		HeroKind.ROGUE:
-			var ally := _find_most_threatened_ally(heroes)
-			if ally != null and ally != self:
+			var ally := _find_ally_needing_help(heroes, enemies)
+			if ally != null:
 				return _find_enemy_near_point(enemies, ally.global_position)
 			return _find_nearest_enemy(enemies)
 
 	return null
 
-func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], arena_rect: Rect2) -> void:
+func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Array[Enemy], arena_rect: Rect2) -> void:
 	var velocity := Vector2.ZERO
 
 	match kind:
@@ -106,9 +114,38 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], arena_rect:
 					var tangent := Vector2(-to_target.y, to_target.x).normalized()
 					velocity = tangent * move_speed * 0.65
 		HeroKind.ROGUE:
-			var ally := _find_most_threatened_ally(heroes)
-			if ally != null and ally != self:
-				velocity = (ally.global_position - global_position).normalized() * move_speed * (1.45 if has_halo else 1.1)
+			var ally := _find_ally_needing_help(heroes, enemies)
+			if ally != null:
+				var desired_spacing: float = ally.body_radius + body_radius + ROGUE_GUARD_PADDING
+				var anchor: Vector2 = ally.global_position
+				if target != null:
+					var ally_to_threat: Vector2 = target.global_position - ally.global_position
+					if ally_to_threat.length() > 0.001:
+						anchor = ally.global_position - ally_to_threat.normalized() * desired_spacing
+				else:
+					var ally_to_rogue: Vector2 = global_position - ally.global_position
+					if ally_to_rogue.length() <= 0.001:
+						ally_to_rogue = Vector2.RIGHT
+					anchor = ally.global_position + ally_to_rogue.normalized() * desired_spacing
+
+				var ally_to_rogue_now: Vector2 = global_position - ally.global_position
+				var ally_dist_now: float = ally_to_rogue_now.length()
+				if ally_dist_now < desired_spacing * ROGUE_TOO_CLOSE_MULT:
+					var away: Vector2 = ally_to_rogue_now.normalized() if ally_dist_now > 0.001 else Vector2.RIGHT
+					var tangent_escape: Vector2 = Vector2(-away.y, away.x).normalized()
+					velocity = (away * 0.8 + tangent_escape * 0.6).normalized() * move_speed * 1.28
+				else:
+					var to_anchor: Vector2 = anchor - global_position
+					var anchor_dist: float = to_anchor.length()
+					if anchor_dist > ROGUE_ANCHOR_TOLERANCE:
+						var speed_mult: float = 1.45 if has_halo else 1.08
+						velocity = to_anchor.normalized() * move_speed * speed_mult
+					else:
+						var orbit_axis: Vector2 = global_position - anchor
+						if orbit_axis.length() <= 0.001:
+							orbit_axis = Vector2.RIGHT
+						var tangent: Vector2 = Vector2(-orbit_axis.y, orbit_axis.x).normalized()
+						velocity = tangent * move_speed * 0.82
 			elif target != null:
 				velocity = (target.global_position - global_position).normalized() * move_speed * 1.1
 
@@ -116,7 +153,7 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], arena_rect:
 	global_position.x = clampf(global_position.x, arena_rect.position.x + body_radius, arena_rect.end.x - body_radius)
 	global_position.y = clampf(global_position.y, arena_rect.position.y + body_radius, arena_rect.end.y - body_radius)
 
-func _try_attack(target: Enemy, enemies: Array[Enemy], heroes: Array[Hero]) -> void:
+func _try_attack(target: Enemy, enemies: Array[Enemy], heroes: Array[Hero], projectile_spawns: Array[Dictionary]) -> void:
 	if target == null:
 		return
 	if attack_timer > 0.0:
@@ -140,7 +177,23 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], heroes: Array[Hero]) -> v
 			HeroKind.ROGUE:
 				damage_mult = 1.25
 
-	target.take_damage(attack_damage * damage_mult)
+	var dealt_damage: float = attack_damage * damage_mult
+	if kind == HeroKind.MAGE:
+		var shot_speed: float = 560.0 if has_halo else 460.0
+		projectile_spawns.append({
+			"team": "hero",
+			"position": global_position,
+			"target_position": target.global_position,
+			"damage": dealt_damage,
+			"speed": shot_speed,
+			"radius": 5.5,
+			"life": 1.8,
+			"color": Color(0.98, 0.46, 0.92)
+		})
+		attack_timer = attack_cooldown
+		return
+
+	target.take_damage(dealt_damage)
 
 	# Synergy hooks kept intentionally simple.
 	if kind == HeroKind.KNIGHT and has_halo:
@@ -181,6 +234,39 @@ func _find_enemy_near_point(enemies: Array[Enemy], point: Vector2) -> Enemy:
 
 	return nearest
 
+func _find_ally_needing_help(heroes: Array[Hero], enemies: Array[Enemy]) -> Hero:
+	var result: Hero = null
+	var lowest_ratio: float = INF
+
+	for hero: Hero in heroes:
+		if hero == self:
+			continue
+		if hero.health <= 0.0:
+			continue
+		var ratio: float = hero.health / maxf(hero.max_health, 0.01)
+		if ratio < lowest_ratio:
+			lowest_ratio = ratio
+			result = hero
+
+	if result == null:
+		return null
+	if lowest_ratio > ROGUE_ASSIST_TRIGGER_RATIO:
+		return null
+	var nearest_threat_dist: float = _nearest_enemy_distance_to_point(enemies, result.global_position)
+	if nearest_threat_dist > ROGUE_ASSIST_THREAT_RADIUS:
+		return null
+	return result
+
+func _nearest_enemy_distance_to_point(enemies: Array[Enemy], point: Vector2) -> float:
+	var nearest_dist: float = INF
+	for enemy: Enemy in enemies:
+		if enemy.health <= 0.0:
+			continue
+		var dist: float = point.distance_to(enemy.global_position)
+		if dist < nearest_dist:
+			nearest_dist = dist
+	return nearest_dist
+
 func _find_most_threatened_ally(heroes: Array[Hero]) -> Hero:
 	var result: Hero = null
 	var lowest_ratio := INF
@@ -210,6 +296,16 @@ func set_halo(active: bool) -> void:
 	has_halo = active
 	queue_redraw()
 
+func trigger_halo_switch_feedback() -> void:
+	switch_flash_timer = 0.24
+	queue_redraw()
+
+func process_visual_tick(delta: float) -> void:
+	if switch_flash_timer <= 0.0:
+		return
+	switch_flash_timer = maxf(0.0, switch_flash_timer - delta)
+	queue_redraw()
+
 func health_ratio() -> float:
 	if max_health <= 0.0:
 		return 0.0
@@ -237,6 +333,13 @@ func _draw() -> void:
 
 	if has_halo and health > 0.0:
 		draw_arc(Vector2.ZERO, body_radius + 8.0, 0.0, TAU, 36, Color(1.0, 0.95, 0.45), 4.0)
+		draw_circle(Vector2.ZERO, body_radius + 3.0, Color(1.0, 0.95, 0.45, 0.2))
+
+	if switch_flash_timer > 0.0 and health > 0.0:
+		var t := switch_flash_timer / 0.24
+		var pulse_radius := body_radius + 8.0 + (1.0 - t) * 22.0
+		var pulse_color := Color(1.0, 0.96, 0.62, 0.45 * t)
+		draw_arc(Vector2.ZERO, pulse_radius, 0.0, TAU, 36, pulse_color, 6.0 * t)
 
 	var bar_width := 38.0
 	var bar_height := 5.0

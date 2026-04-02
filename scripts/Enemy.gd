@@ -61,7 +61,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero) 
 	strafe_dir = -1.0 if randf() < 0.5 else 1.0
 	queue_redraw()
 
-func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2) -> void:
+func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projectile_spawns: Array[Dictionary]) -> void:
 	if health <= 0.0:
 		return
 
@@ -112,7 +112,19 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2) -> void:
 		var dealt := damage
 		if kind == EnemyKind.CHARGER and charge_burst_timer > 0.0:
 			dealt *= 1.35
-		target_hero.apply_damage(dealt)
+		if kind == EnemyKind.RANGED:
+			projectile_spawns.append({
+				"team": "enemy",
+				"position": global_position,
+				"target_position": target_hero.global_position,
+				"damage": dealt,
+				"speed": 340.0,
+				"radius": 5.0,
+				"life": 2.0,
+				"color": Color(1.0, 0.78, 0.32)
+			})
+		else:
+			target_hero.apply_damage(dealt)
 		attack_timer = attack_cooldown
 
 func _retarget(heroes: Array[Hero]) -> void:

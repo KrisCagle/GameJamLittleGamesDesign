@@ -9,6 +9,8 @@ script = ExtResource("1")
 
 [node name="Enemies" type="Node2D" parent="."]
 
+[node name="Projectiles" type="Node2D" parent="."]
+
 [node name="UI" type="CanvasLayer" parent="."]
 
 [node name="WaveLabel" type="Label" parent="UI"]

@@ -2,6 +2,7 @@ extends Node2D
 
 const HeroScript = preload("res://scripts/Hero.gd")
 const EnemyScript = preload("res://scripts/Enemy.gd")
+const ProjectileScript = preload("res://scripts/Projectile.gd")
 
 const HERO_KNIGHT := 0
 const HERO_MAGE := 1
@@ -10,6 +11,8 @@ const HERO_ROGUE := 2
 const ENEMY_SWARM := 0
 const ENEMY_RANGED := 1
 const ENEMY_CHARGER := 2
+const PROJECTILE_TEAM_HERO := 0
+const PROJECTILE_TEAM_ENEMY := 1
 
 const VIEW_SIZE := Vector2(1280, 720)
 const ARENA_MARGIN := 44.0
@@ -18,9 +21,16 @@ const LAST_STAND_HEAT_RATE := 36.0
 const LAST_STAND_COOL_RATE := 28.0
 const LAST_STAND_OVERLOAD_DURATION := 2.0
 const LAST_STAND_FLICKER_CHECK_PERIOD := 0.12
+const HALO_SWITCH_COOLDOWN := 0.22
+const HALO_SWITCH_HEAT_MAX := 100.0
+const HALO_SWITCH_HEAT_PER_SWAP := 34.0
+const HALO_SWITCH_HEAT_COOL_RATE := 22.0
+const HALO_SWITCH_OVERHEAT_LOCK := 1.2
+const HALO_SWITCH_FEEDBACK_DURATION := 0.24
 
 @onready var heroes_root: Node2D = $Heroes
 @onready var enemies_root: Node2D = $Enemies
+@onready var projectiles_root: Node2D = $Projectiles
 @onready var wave_label: Label = $UI/WaveLabel
 @onready var threat_label: Label = $UI/ThreatLabel
 @onready var hero_status: Label = $UI/HeroStatus
@@ -30,6 +40,8 @@ var arena_rect := Rect2(Vector2(ARENA_MARGIN, ARENA_MARGIN), VIEW_SIZE - Vector2
 
 var heroes: Array[Hero] = []
 var enemies: Array[Enemy] = []
+var projectiles: Array = []
+var projectile_spawns: Array[Dictionary] = []
 
 var halo_index := 0
 
@@ -50,11 +62,21 @@ var halo_overloaded := false
 var halo_overload_timer := 0.0
 var halo_flicker_off_timer := 0.0
 var halo_flicker_check_timer := 0.0
+var halo_switch_cooldown_timer := 0.0
+var halo_switch_heat := 0.0
+var halo_switch_overheat_timer := 0.0
+var halo_switch_feedback_timer := 0.0
+var halo_switch_feedback_from := Vector2.ZERO
+var halo_switch_feedback_to := Vector2.ZERO
 
 func _ready() -> void:
 	randomize()
 	_spawn_heroes()
 	_set_halo(0)
+	halo_switch_heat = 0.0
+	halo_switch_cooldown_timer = 0.0
+	halo_switch_overheat_timer = 0.0
+	halo_switch_feedback_timer = 0.0
 	_start_wave()
 	set_process(true)
 	queue_redraw()
@@ -66,13 +88,18 @@ func _process(delta: float) -> void:
 
 	elapsed_time += delta
 	_update_spawning(delta)
+	_update_halo_switch_system(delta)
 	_update_last_stand(delta)
+	projectile_spawns.clear()
 
-	for hero in heroes:
-		hero.process_tick(delta, enemies, heroes, arena_rect)
+	for hero: Hero in heroes:
+		hero.process_visual_tick(delta)
+		hero.process_tick(delta, enemies, heroes, arena_rect, projectile_spawns)
 	_apply_halo_synergies(delta)
-	for enemy in enemies:
-		enemy.process_tick(delta, heroes, arena_rect)
+	for enemy: Enemy in enemies:
+		enemy.process_tick(delta, heroes, arena_rect, projectile_spawns)
+	_spawn_projectiles_from_queue()
+	_update_projectiles(delta)
 
 	_cleanup_dead_enemies()
 	_validate_halo_target()
@@ -121,13 +148,31 @@ func _set_halo(index: int) -> void:
 	if heroes[index].health <= 0.0:
 		return
 
+	if index == halo_index and not last_stand_active:
+		if halo_index >= 0 and halo_index < heroes.size() and heroes[halo_index].has_halo:
+			return
+
 	if last_stand_active and index == halo_index and not halo_overloaded:
 		last_stand_manual_drop = not last_stand_manual_drop
-	else:
-		halo_index = index
-		last_stand_manual_drop = false
+		halo_switch_feedback_from = heroes[index].global_position
+		halo_switch_feedback_to = heroes[index].global_position
+		halo_switch_feedback_timer = HALO_SWITCH_FEEDBACK_DURATION * 0.7
+		heroes[index].trigger_halo_switch_feedback()
+		_sync_halo_state()
+		return
 
+	if _is_halo_switch_locked():
+		return
+
+	var previous_index := halo_index
+	halo_index = index
+	last_stand_manual_drop = false
+	halo_switch_cooldown_timer = HALO_SWITCH_COOLDOWN
+	halo_switch_heat = minf(HALO_SWITCH_HEAT_MAX, halo_switch_heat + HALO_SWITCH_HEAT_PER_SWAP)
+	if halo_switch_heat >= HALO_SWITCH_HEAT_MAX:
+		halo_switch_overheat_timer = HALO_SWITCH_OVERHEAT_LOCK
 	_sync_halo_state()
+	_on_halo_switched(previous_index, halo_index)
 
 func _set_halo_from_point(point: Vector2) -> void:
 	var closest_index := -1
@@ -167,6 +212,32 @@ func _update_spawning(delta: float) -> void:
 
 	if spawn_remaining <= 0:
 		spawning = false
+
+func _update_halo_switch_system(delta: float) -> void:
+	halo_switch_cooldown_timer = maxf(0.0, halo_switch_cooldown_timer - delta)
+	halo_switch_feedback_timer = maxf(0.0, halo_switch_feedback_timer - delta)
+
+	if halo_switch_overheat_timer > 0.0:
+		halo_switch_overheat_timer = maxf(0.0, halo_switch_overheat_timer - delta)
+		halo_switch_heat = maxf(0.0, halo_switch_heat - HALO_SWITCH_HEAT_COOL_RATE * 1.45 * delta)
+	else:
+		halo_switch_heat = maxf(0.0, halo_switch_heat - HALO_SWITCH_HEAT_COOL_RATE * delta)
+
+func _is_halo_switch_locked() -> bool:
+	return halo_switch_cooldown_timer > 0.0 or halo_switch_overheat_timer > 0.0
+
+func _on_halo_switched(previous_index: int, new_index: int) -> void:
+	if new_index < 0 or new_index >= heroes.size():
+		return
+
+	var from_pos := heroes[new_index].global_position
+	if previous_index >= 0 and previous_index < heroes.size():
+		from_pos = heroes[previous_index].global_position
+
+	halo_switch_feedback_from = from_pos
+	halo_switch_feedback_to = heroes[new_index].global_position
+	halo_switch_feedback_timer = HALO_SWITCH_FEEDBACK_DURATION
+	heroes[new_index].trigger_halo_switch_feedback()
 
 func _update_last_stand(delta: float) -> void:
 	var alive_count := _alive_hero_count()
@@ -244,6 +315,12 @@ func _sync_halo_state() -> void:
 
 func _apply_halo_synergies(delta: float) -> void:
 	for hero: Hero in heroes:
+		if hero.kind == HERO_KNIGHT and hero.has_halo:
+			for enemy: Enemy in enemies:
+				if enemy.health <= 0.0:
+					continue
+				if hero.global_position.distance_to(enemy.global_position) <= 240.0:
+					enemy.target_hero = hero
 		if not hero.consume_knight_pull_pulse(delta):
 			continue
 		for enemy: Enemy in enemies:
@@ -255,7 +332,7 @@ func _apply_halo_synergies(delta: float) -> void:
 func _spawn_enemy() -> void:
 	var enemy: Enemy = EnemyScript.new()
 	var kind := _pick_enemy_kind()
-	var target := _pick_spawn_target()
+	var target := _pick_spawn_target(kind)
 	enemy.configure(kind, _random_spawn_point(), target)
 	enemies_root.add_child(enemy)
 	enemies.append(enemy)
@@ -271,7 +348,7 @@ func _pick_enemy_kind() -> int:
 		return ENEMY_RANGED
 	return ENEMY_SWARM
 
-func _pick_spawn_target() -> Hero:
+func _pick_spawn_target(enemy_kind: int) -> Hero:
 	var alive: Array[Hero] = []
 	for hero: Hero in heroes:
 		if hero.health > 0.0:
@@ -279,6 +356,19 @@ func _pick_spawn_target() -> Hero:
 
 	if alive.is_empty():
 		return null
+
+	var preferred_kind := HERO_KNIGHT
+	match enemy_kind:
+		ENEMY_SWARM:
+			preferred_kind = HERO_KNIGHT
+		ENEMY_RANGED:
+			preferred_kind = HERO_MAGE
+		ENEMY_CHARGER:
+			preferred_kind = HERO_ROGUE
+
+	var preferred := _find_alive_hero_by_kind(alive, preferred_kind)
+	if preferred != null and randf() < 0.72:
+		return preferred
 
 	var best: Hero = alive[0]
 	var best_score := INF
@@ -294,6 +384,12 @@ func _pick_spawn_target() -> Hero:
 			best_score = score
 
 	return best
+
+func _find_alive_hero_by_kind(alive: Array[Hero], kind: int) -> Hero:
+	for hero: Hero in alive:
+		if hero.kind == kind:
+			return hero
+	return null
 
 func _random_spawn_point() -> Vector2:
 	var edge := randi() % 4
@@ -316,6 +412,56 @@ func _cleanup_dead_enemies() -> void:
 			enemies[i].queue_free()
 			enemies.remove_at(i)
 
+func _spawn_projectiles_from_queue() -> void:
+	if projectile_spawns.is_empty():
+		return
+
+	for data: Dictionary in projectile_spawns:
+		var projectile = ProjectileScript.new()
+		projectile.configure_from_data(data)
+		projectiles_root.add_child(projectile)
+		projectiles.append(projectile)
+	projectile_spawns.clear()
+
+func _update_projectiles(delta: float) -> void:
+	if projectiles.is_empty():
+		return
+
+	var extended_arena := arena_rect.grow(48.0)
+	for i in range(projectiles.size() - 1, -1, -1):
+		var projectile = projectiles[i]
+		var alive: bool = bool(projectile.process_tick(delta, extended_arena))
+		var hit: bool = false
+
+		if alive:
+			var projectile_pos: Vector2 = projectile.global_position
+			var projectile_radius: float = float(projectile.radius)
+			var projectile_damage: float = float(projectile.damage)
+			var projectile_team: int = int(projectile.team)
+
+			if projectile_team == PROJECTILE_TEAM_HERO:
+				for enemy: Enemy in enemies:
+					if enemy.health <= 0.0:
+						continue
+					var impact_dist: float = projectile_radius + enemy.body_radius
+					if projectile_pos.distance_squared_to(enemy.global_position) <= impact_dist * impact_dist:
+						enemy.take_damage(projectile_damage)
+						hit = true
+						break
+			else:
+				for hero: Hero in heroes:
+					if hero.health <= 0.0:
+						continue
+					var impact_dist: float = projectile_radius + hero.body_radius
+					if projectile_pos.distance_squared_to(hero.global_position) <= impact_dist * impact_dist:
+						hero.apply_damage(projectile_damage)
+						hit = true
+						break
+
+		if hit or not alive:
+			projectile.queue_free()
+			projectiles.remove_at(i)
+
 func _validate_halo_target() -> void:
 	if halo_index >= 0 and halo_index < heroes.size() and heroes[halo_index].health > 0.0:
 		_sync_halo_state()
@@ -323,9 +469,12 @@ func _validate_halo_target() -> void:
 
 	for i in range(heroes.size()):
 		if heroes[i].health > 0.0:
+			var previous_index := halo_index
 			halo_index = i
 			last_stand_manual_drop = false
 			_sync_halo_state()
+			if previous_index != halo_index:
+				_on_halo_switched(previous_index, halo_index)
 			return
 
 	halo_index = -1
@@ -370,7 +519,12 @@ func _update_ui() -> void:
 			ENEMY_CHARGER:
 				charger_count += 1
 
-	threat_label.text = "Enemies %d  |  Swarm %d  Ranged %d  Charger %d" % [enemies.size(), swarm_count, ranged_count, charger_count]
+	threat_label.text = "Enemies %d  |  Swarm %d  Ranged %d  Charger %d  |  Shots %d" % [enemies.size(), swarm_count, ranged_count, charger_count, projectiles.size()]
+	threat_label.text += "  |  Switch Heat %.0f%%" % [halo_switch_heat]
+	if halo_switch_overheat_timer > 0.0:
+		threat_label.text += "  |  OVERHEAT %.1fs" % [halo_switch_overheat_timer]
+	elif halo_switch_cooldown_timer > 0.0:
+		threat_label.text += "  |  Cooldown %.2fs" % [halo_switch_cooldown_timer]
 	if last_stand_active:
 		var stand_state := "OVERLOAD" if halo_overloaded else "UNSTABLE"
 		threat_label.text += "  |  Last Stand %s %.0f%%" % [stand_state, halo_heat]
@@ -394,6 +548,10 @@ func _update_ui() -> void:
 
 	if game_over:
 		hint_label.text = "All heroes are down. Press R or Enter to restart."
+	elif halo_switch_overheat_timer > 0.0 and not last_stand_active:
+		hint_label.text = "Halo overheat lockout. Hold position while switch recovers."
+	elif halo_switch_cooldown_timer > 0.0 and not last_stand_active:
+		hint_label.text = "Halo transfer cooling down. Chain decisions slightly ahead of danger."
 	elif last_stand_active and halo_overloaded:
 		hint_label.text = "Last Stand: Halo overloaded. Survive %.1fs with no invincibility." % [halo_overload_timer]
 	elif last_stand_active:
@@ -422,3 +580,9 @@ func _draw() -> void:
 		draw_line(Vector2(x, arena_rect.position.y), Vector2(x, bottom), Color(1, 1, 1, 0.04), 1.0)
 	for y in range(int(arena_rect.position.y) + 64, int(bottom), 64):
 		draw_line(Vector2(arena_rect.position.x, y), Vector2(right, y), Color(1, 1, 1, 0.04), 1.0)
+
+	if halo_switch_feedback_timer > 0.0:
+		var t := halo_switch_feedback_timer / HALO_SWITCH_FEEDBACK_DURATION
+		var pulse_color := Color(1.0, 0.96, 0.58, 0.8 * t)
+		draw_line(halo_switch_feedback_from, halo_switch_feedback_to, pulse_color, 6.0 * t)
+		draw_circle(halo_switch_feedback_to, 12.0 + (1.0 - t) * 16.0, Color(1.0, 0.96, 0.58, 0.25 * t))

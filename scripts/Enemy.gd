@@ -1,7 +1,7 @@
 extends Node2D
 class_name Enemy
 
-enum EnemyKind { SWARM, RANGED, CHARGER, BOSS }
+enum EnemyKind { SWARM, RANGED, ELITE, BOSS }
 
 var kind: int = EnemyKind.SWARM
 
@@ -17,13 +17,20 @@ var body_color: Color = Color(0.95, 0.4, 0.4)
 var target_hero: Hero = null
 var attack_timer: float = 0.0
 var target_refresh_timer: float = 0.0
-var charge_timer: float = 0.0
-var charge_burst_timer: float = 0.0
 var strafe_dir: float = 1.0
 
 var wave_level: int = 1
+
+var elite_window_timer: float = 0.0
+var elite_window_duration: float = 0.0
+var elite_window_active: bool = false
+
 var boss_aoe_timer: float = 0.0
 var boss_summon_timer: float = 0.0
+var boss_volley_timer: float = 0.0
+var boss_window_timer: float = 0.0
+var boss_window_duration: float = 0.0
+var boss_window_active: bool = false
 var boss_time_alive: float = 0.0
 
 func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, wave_strength: int = 1) -> void:
@@ -34,48 +41,54 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 
 	match kind:
 		EnemyKind.SWARM:
-			max_health = 38.0
+			max_health = 28.0 + float(wave_level) * 1.2
 			health = max_health
-			move_speed = 112.0
-			attack_range = 21.0
-			damage = 8.0
-			attack_cooldown = 0.9
-			body_radius = 9.0
-			body_color = Color(0.95, 0.32, 0.32)
+			move_speed = 132.0 + float(wave_level) * 0.9
+			attack_range = 22.0
+			damage = 7.0 + float(wave_level) * 0.18
+			attack_cooldown = 0.78
+			body_radius = 8.0
+			body_color = Color(0.96, 0.34, 0.34)
 		EnemyKind.RANGED:
-			max_health = 58.0
+			max_health = 56.0 + float(wave_level) * 1.6
 			health = max_health
-			move_speed = 84.0
-			attack_range = 168.0
-			damage = 11.0
-			attack_cooldown = 1.25
+			move_speed = 88.0 + float(wave_level) * 0.55
+			attack_range = 198.0
+			damage = 9.5 + float(wave_level) * 0.3
+			attack_cooldown = 1.02
 			body_radius = 11.0
-			body_color = Color(0.95, 0.72, 0.25)
-		EnemyKind.CHARGER:
-			max_health = 82.0
+			body_color = Color(0.98, 0.72, 0.27)
+		EnemyKind.ELITE:
+			max_health = 120.0 + float(wave_level) * 5.2
 			health = max_health
-			move_speed = 96.0
-			attack_range = 27.0
-			damage = 20.0
-			attack_cooldown = 1.8
-			body_radius = 13.0
-			body_color = Color(0.66, 0.42, 0.98)
+			move_speed = 84.0 + float(wave_level) * 0.45
+			attack_range = 30.0
+			damage = 18.0 + float(wave_level) * 0.65
+			attack_cooldown = 1.35
+			body_radius = 14.0
+			body_color = Color(0.71, 0.44, 1.0)
+			elite_window_timer = randf_range(2.2, 3.6)
+			elite_window_duration = 0.0
+			elite_window_active = false
 		EnemyKind.BOSS:
-			max_health = 560.0 + float(max(0, wave_level - 5)) * 28.0
+			max_health = 600.0 + float(max(0, wave_level - 5)) * 34.0
 			health = max_health
 			move_speed = 62.0
 			attack_range = 260.0
-			damage = 17.0 + float(max(0, wave_level - 5)) * 0.6
-			attack_cooldown = 1.45
-			body_radius = 28.0
+			damage = 14.0 + float(max(0, wave_level - 5)) * 0.65
+			attack_cooldown = 1.2
+			body_radius = 30.0
 			body_color = Color(0.9, 0.22, 0.3)
-			boss_aoe_timer = randf_range(2.0, 3.1)
-			boss_summon_timer = randf_range(3.4, 4.6)
+			boss_aoe_timer = randf_range(2.0, 2.9)
+			boss_summon_timer = randf_range(2.8, 3.8)
+			boss_volley_timer = randf_range(1.0, 1.5)
+			boss_window_timer = randf_range(5.4, 7.0)
+			boss_window_duration = 0.0
+			boss_window_active = false
 			boss_time_alive = 0.0
 
 	attack_timer = randf_range(0.0, attack_cooldown)
 	target_refresh_timer = randf_range(1.0, 2.1)
-	charge_timer = randf_range(1.6, 2.8)
 	strafe_dir = -1.0 if randf() < 0.5 else 1.0
 	queue_redraw()
 
@@ -87,49 +100,51 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 	target_refresh_timer -= delta
 	if target_refresh_timer <= 0.0:
 		_retarget(heroes)
-		target_refresh_timer = randf_range(1.1, 2.6)
+		target_refresh_timer = randf_range(1.1, 2.4)
 
 	if target_hero == null or target_hero.health <= 0.0:
 		_retarget(heroes)
 	if target_hero == null:
 		return
 
-	var to_target := target_hero.global_position - global_position
-	var dist := to_target.length()
-	var direction := to_target.normalized() if dist > 0.001 else Vector2.ZERO
-	var velocity := Vector2.ZERO
+	if kind == EnemyKind.ELITE:
+		_update_elite_window(delta)
+	if kind == EnemyKind.BOSS:
+		_update_boss_window(delta)
+
+	var to_target: Vector2 = target_hero.global_position - global_position
+	var dist: float = to_target.length()
+	var direction: Vector2 = to_target.normalized() if dist > 0.001 else Vector2.ZERO
+	var velocity: Vector2 = Vector2.ZERO
 
 	match kind:
 		EnemyKind.SWARM:
 			velocity = direction * move_speed
 		EnemyKind.RANGED:
-			var desired_dist := 155.0
-			if dist < desired_dist * 0.75:
+			var desired_dist: float = 188.0
+			if dist < desired_dist * 0.74:
 				velocity = -direction * move_speed
 			elif dist > desired_dist * 1.2:
 				velocity = direction * move_speed * 0.9
 			else:
-				var tangent := Vector2(-direction.y, direction.x)
-				velocity = tangent * move_speed * strafe_dir * 0.65
-		EnemyKind.CHARGER:
-			charge_timer -= delta
-			if charge_timer <= 0.0:
-				charge_burst_timer = 0.42
-				charge_timer = randf_range(2.2, 3.5)
-			if charge_burst_timer > 0.0:
-				charge_burst_timer = maxf(0.0, charge_burst_timer - delta)
-				velocity = direction * move_speed * 2.35
+				var tangent: Vector2 = Vector2(-direction.y, direction.x)
+				velocity = tangent * move_speed * strafe_dir * 0.68
+		EnemyKind.ELITE:
+			if elite_window_active:
+				velocity = -direction * move_speed * 0.38
 			else:
 				velocity = direction * move_speed
 		EnemyKind.BOSS:
-			var desired_dist := 146.0
-			if dist > desired_dist * 1.1:
+			var desired_dist: float = 150.0
+			if dist > desired_dist * 1.08:
 				velocity = direction * move_speed
-			elif dist < desired_dist * 0.72:
-				velocity = -direction * move_speed * 0.56
+			elif dist < desired_dist * 0.75:
+				velocity = -direction * move_speed * 0.6
 			else:
-				var tangent := Vector2(-direction.y, direction.x).normalized()
-				velocity = tangent * move_speed * strafe_dir * 0.42
+				var tangent_boss: Vector2 = Vector2(-direction.y, direction.x).normalized()
+				velocity = tangent_boss * move_speed * strafe_dir * 0.44
+			if boss_window_active:
+				velocity *= 0.62
 
 	global_position += velocity * delta
 	global_position.x = clampf(global_position.x, arena_rect.position.x + body_radius, arena_rect.end.x - body_radius)
@@ -139,37 +154,73 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 		boss_time_alive += delta
 		boss_aoe_timer = maxf(0.0, boss_aoe_timer - delta)
 		boss_summon_timer = maxf(0.0, boss_summon_timer - delta)
+		boss_volley_timer = maxf(0.0, boss_volley_timer - delta)
 
 		if boss_aoe_timer <= 0.0:
 			_emit_boss_projectile_ring(projectile_spawns)
-			var aoe_cooldown: float = maxf(1.8, 3.2 - boss_time_alive * 0.05)
-			boss_aoe_timer = aoe_cooldown + randf_range(-0.2, 0.22)
+			var aoe_cooldown: float = maxf(1.6, 2.9 - boss_time_alive * 0.04)
+			boss_aoe_timer = aoe_cooldown + randf_range(-0.22, 0.22)
 
 		if boss_summon_timer <= 0.0:
 			_queue_boss_summons(summon_spawns)
-			var summon_cooldown: float = maxf(2.3, 5.0 - boss_time_alive * 0.08)
-			boss_summon_timer = summon_cooldown + randf_range(-0.34, 0.28)
+			var summon_cooldown: float = maxf(1.8, 4.2 - boss_time_alive * 0.08)
+			boss_summon_timer = summon_cooldown + randf_range(-0.3, 0.25)
+
+		if boss_volley_timer <= 0.0:
+			_spawn_boss_projectile_volley(target_hero, projectile_spawns)
+			var volley_cooldown: float = 1.0 if not boss_window_active else 1.5
+			boss_volley_timer = volley_cooldown + randf_range(-0.15, 0.12)
 
 	if attack_timer <= 0.0 and dist <= attack_range and target_hero.health > 0.0:
-		var dealt: float = damage
-		if kind == EnemyKind.CHARGER and charge_burst_timer > 0.0:
-			dealt *= 1.35
-		if kind == EnemyKind.BOSS:
-			_spawn_boss_projectile_volley(target_hero, projectile_spawns)
-		elif kind == EnemyKind.RANGED:
+		if kind == EnemyKind.RANGED:
 			projectile_spawns.append({
 				"team": "enemy",
 				"position": global_position,
 				"target_position": target_hero.global_position,
-				"damage": dealt,
-				"speed": 340.0,
+				"damage": damage,
+				"speed": 355.0,
 				"radius": 5.0,
-				"life": 2.0,
-				"color": Color(1.0, 0.78, 0.32)
+				"life": 2.2,
+				"color": Color(1.0, 0.76, 0.34)
 			})
-		else:
+		elif kind == EnemyKind.SWARM or kind == EnemyKind.ELITE:
+			var dealt: float = damage
+			if kind == EnemyKind.ELITE and elite_window_active:
+				dealt *= 0.75
 			target_hero.apply_damage(dealt)
 		attack_timer = attack_cooldown
+
+func _update_elite_window(delta: float) -> void:
+	if kind != EnemyKind.ELITE:
+		return
+
+	if elite_window_active:
+		elite_window_duration = maxf(0.0, elite_window_duration - delta)
+		if elite_window_duration <= 0.0:
+			elite_window_active = false
+			elite_window_timer = randf_range(2.8, 4.2)
+	else:
+		elite_window_timer = maxf(0.0, elite_window_timer - delta)
+		if elite_window_timer <= 0.0:
+			elite_window_active = true
+			elite_window_duration = randf_range(1.05, 1.6)
+	queue_redraw()
+
+func _update_boss_window(delta: float) -> void:
+	if kind != EnemyKind.BOSS:
+		return
+
+	if boss_window_active:
+		boss_window_duration = maxf(0.0, boss_window_duration - delta)
+		if boss_window_duration <= 0.0:
+			boss_window_active = false
+			boss_window_timer = randf_range(6.4, 8.2)
+	else:
+		boss_window_timer = maxf(0.0, boss_window_timer - delta)
+		if boss_window_timer <= 0.0:
+			boss_window_active = true
+			boss_window_duration = randf_range(2.1, 2.9)
+	queue_redraw()
 
 func _retarget(heroes: Array[Hero]) -> void:
 	var alive_heroes: Array[Hero] = []
@@ -181,14 +232,30 @@ func _retarget(heroes: Array[Hero]) -> void:
 		target_hero = null
 		return
 
-	if target_hero != null and target_hero.health > 0.0 and randf() < 0.42:
+	if target_hero != null and target_hero.health > 0.0 and randf() < 0.4:
 		return
+
+	var preferred_kind: int = 0
+	match kind:
+		EnemyKind.SWARM:
+			preferred_kind = 0
+		EnemyKind.RANGED:
+			preferred_kind = 1
+		EnemyKind.ELITE:
+			preferred_kind = 2
+		EnemyKind.BOSS:
+			preferred_kind = 0
+
+	for hero: Hero in alive_heroes:
+		if hero.kind == preferred_kind and randf() < 0.7:
+			target_hero = hero
+			return
 
 	target_hero = alive_heroes[randi() % alive_heroes.size()]
 
 func _emit_boss_projectile_ring(projectile_spawns: Array[Dictionary]) -> void:
 	var phase: int = clampi(int(floor(boss_time_alive / 18.0)), 0, 5)
-	var projectile_count: int = 16 + phase * 2
+	var projectile_count: int = 18 + phase * 2
 	var shot_speed: float = 250.0 + float(phase) * 24.0
 	var ring_damage: float = 8.0 + float(phase) * 1.1
 
@@ -198,7 +265,7 @@ func _emit_boss_projectile_ring(projectile_spawns: Array[Dictionary]) -> void:
 		projectile_spawns.append({
 			"team": "enemy",
 			"position": global_position,
-			"target_position": global_position + shot_dir * 220.0,
+			"target_position": global_position + shot_dir * 240.0,
 			"damage": ring_damage,
 			"speed": shot_speed,
 			"radius": 5.6,
@@ -207,17 +274,17 @@ func _emit_boss_projectile_ring(projectile_spawns: Array[Dictionary]) -> void:
 		})
 
 func _queue_boss_summons(summon_spawns: Array[Dictionary]) -> void:
-	var phase: int = clampi(int(floor(boss_time_alive / 16.0)), 0, 4)
+	var phase: int = clampi(int(floor(boss_time_alive / 15.0)), 0, 5)
 	var summon_count: int = 2 + phase
 
 	for i in range(summon_count):
 		var roll: float = randf()
-		var charger_chance: float = minf(0.12 + float(phase) * 0.05, 0.34)
-		var ranged_chance: float = minf(0.28 + float(phase) * 0.06, 0.5)
+		var elite_chance: float = minf(0.08 + float(phase) * 0.05, 0.3)
+		var ranged_chance: float = minf(0.35 + float(phase) * 0.05, 0.62)
 		var summon_kind: int = EnemyKind.SWARM
-		if roll < charger_chance:
-			summon_kind = EnemyKind.CHARGER
-		elif roll < charger_chance + ranged_chance:
+		if roll < elite_chance:
+			summon_kind = EnemyKind.ELITE
+		elif roll < elite_chance + ranged_chance:
 			summon_kind = EnemyKind.RANGED
 
 		var dir: Vector2 = Vector2.RIGHT.rotated(randf() * TAU)
@@ -228,26 +295,33 @@ func _queue_boss_summons(summon_spawns: Array[Dictionary]) -> void:
 		})
 
 func _spawn_boss_projectile_volley(target: Hero, projectile_spawns: Array[Dictionary]) -> void:
+	if target == null:
+		return
 	var base_dir: Vector2 = (target.global_position - global_position).normalized()
 	if base_dir.length_squared() <= 0.0001:
 		base_dir = Vector2.RIGHT
 
-	var spread_angles: Array[float] = [-0.22, 0.0, 0.22]
+	var spread_angles: Array[float] = [-0.2, 0.0, 0.2]
 	for angle in spread_angles:
 		var shot_dir: Vector2 = base_dir.rotated(angle)
 		projectile_spawns.append({
 			"team": "enemy",
 			"position": global_position,
-			"target_position": global_position + shot_dir * 220.0,
+			"target_position": global_position + shot_dir * 240.0,
 			"damage": damage,
-			"speed": 360.0,
-			"radius": 7.0,
+			"speed": 372.0,
+			"radius": 6.6,
 			"life": 2.2,
 			"color": Color(1.0, 0.4, 0.32)
 		})
 
 func take_damage(amount: float) -> void:
-	health = maxf(0.0, health - amount)
+	var incoming: float = amount
+	if kind == EnemyKind.ELITE and elite_window_active:
+		incoming *= 1.65
+	if kind == EnemyKind.BOSS and boss_window_active:
+		incoming *= 1.58
+	health = maxf(0.0, health - incoming)
 	queue_redraw()
 
 func apply_pull_towards(point: Vector2, strength: float) -> void:
@@ -255,7 +329,7 @@ func apply_pull_towards(point: Vector2, strength: float) -> void:
 		return
 	if kind == EnemyKind.BOSS:
 		return
-	var to_point := point - global_position
+	var to_point: Vector2 = point - global_position
 	if to_point.length_squared() <= 0.0001:
 		return
 	global_position += to_point.normalized() * strength
@@ -264,14 +338,23 @@ func _draw() -> void:
 	if health <= 0.0:
 		return
 
-	draw_circle(Vector2.ZERO, body_radius, body_color)
-	if kind == EnemyKind.BOSS:
-		draw_circle(Vector2.ZERO, body_radius + 6.0, Color(1.0, 0.25, 0.24, 0.2))
+	var draw_color: Color = body_color
+	if kind == EnemyKind.ELITE and elite_window_active:
+		draw_color = Color(1.0, 0.9, 0.45)
+	if kind == EnemyKind.BOSS and boss_window_active:
+		draw_color = Color(1.0, 0.74, 0.52)
 
-	var bar_width := 24.0
+	draw_circle(Vector2.ZERO, body_radius, draw_color)
+
+	if kind == EnemyKind.ELITE and elite_window_active:
+		draw_arc(Vector2.ZERO, body_radius + 6.0, 0.0, TAU, 32, Color(1.0, 0.95, 0.6, 0.8), 2.0)
+	if kind == EnemyKind.BOSS and boss_window_active:
+		draw_arc(Vector2.ZERO, body_radius + 8.0, 0.0, TAU, 32, Color(1.0, 0.88, 0.7, 0.85), 2.4)
+
+	var bar_width: float = 24.0
 	if kind == EnemyKind.BOSS:
-		bar_width = 48.0
-	var bar_pos := Vector2(-bar_width * 0.5, -body_radius - 10.0)
+		bar_width = 52.0
+	var bar_pos: Vector2 = Vector2(-bar_width * 0.5, -body_radius - 10.0)
 	draw_rect(Rect2(bar_pos, Vector2(bar_width, 4.0)), Color(0.08, 0.08, 0.08, 0.8), true)
-	var ratio := clampf(health / maxf(max_health, 0.01), 0.0, 1.0)
+	var ratio: float = clampf(health / maxf(max_health, 0.01), 0.0, 1.0)
 	draw_rect(Rect2(bar_pos, Vector2(bar_width * ratio, 4.0)), Color(0.8, 0.95, 0.3), true)

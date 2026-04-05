@@ -4,6 +4,7 @@ class_name Enemy
 enum EnemyKind { SWARM, RANGED, ELITE, BOSS }
 const SWARM_SPRITE_PATH := "res://assets/enemies/enemy_swarm_attack.webp"
 const SWARM_ANIM_NAME := "attack"
+const ENEMY_SIZE_MULT := 1.34
 
 var kind: int = EnemyKind.SWARM
 
@@ -95,6 +96,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			_hide_swarm_sprite()
 
 	attack_timer = randf_range(0.0, attack_cooldown)
+	body_radius *= ENEMY_SIZE_MULT
 	target_refresh_timer = randf_range(1.0, 2.1)
 	strafe_dir = -1.0 if randf() < 0.5 else 1.0
 	queue_redraw()
@@ -297,7 +299,7 @@ func _ensure_swarm_sprite() -> void:
 	swarm_sprite.animation = SWARM_ANIM_NAME
 	swarm_sprite.centered = true
 	swarm_sprite.z_index = 3
-	swarm_sprite.scale = Vector2(1.15, 1.15)
+	swarm_sprite.scale = Vector2(1.15, 1.15) * ENEMY_SIZE_MULT
 	add_child(swarm_sprite)
 	swarm_sprite.play(SWARM_ANIM_NAME)
 

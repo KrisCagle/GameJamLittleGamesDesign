@@ -43,13 +43,16 @@ const HERO_CARD_TANK_SHEET := "res://assets/heroes/tank_idle.png"
 const HERO_CARD_RANGER_SHEET := "res://assets/heroes/ranger_idle.png"
 const HERO_CARD_ROGUE_SHEET := "res://assets/heroes/rogue_idle.png"
 const START_MENU_TITLE_FONT_PATH := "res://assets/fonts/Starstruck.ttf"
-const FLOOR_TILE_SIZE := 84.0
+const FLOOR_TILE_SIZE := 104.0
 const FLOOR_PATTERN_PAD := 220.0
 const WALL_FRAME_THICKNESS := 34.0
-const VIGNETTE_RINGS := 6
+const VIGNETTE_RINGS := 4
 const HERO_CONTRAST_BASE_RADIUS := 34.0
-const ATMOS_RAY_COUNT := 6
+const ATMOS_RAY_COUNT := 4
 const ATMOS_RAY_EDGE_INSET := 140.0
+const CAMERA_ZOOM_MENU := Vector2(1.0, 1.0)
+const CAMERA_ZOOM_GAME := Vector2(1.34, 1.34)
+const CAMERA_ZOOM_SMOOTH := 8.5
 
 @onready var heroes_root: Node2D = $Heroes
 @onready var enemies_root: Node2D = $Enemies
@@ -150,6 +153,7 @@ func _ready() -> void:
 	halo_switch_feedback_timer = 0.0
 	_sync_halo_state()
 	world_camera.position = arena_rect.get_center()
+	world_camera.zoom = CAMERA_ZOOM_MENU
 	world_camera.limit_left = int(arena_rect.position.x)
 	world_camera.limit_top = int(arena_rect.position.y)
 	world_camera.limit_right = int(arena_rect.end.x)
@@ -354,8 +358,8 @@ func _setup_lighting_nodes() -> void:
 	center_ceiling_beam = null
 	center_ceiling_core = null
 	center_ceiling_haze = null
-	light_texture_soft = _create_soft_light_texture(256, 2.05)
-	light_texture_wide = _create_soft_light_texture(256, 1.35)
+	light_texture_soft = _create_soft_light_texture(192, 2.05)
+	light_texture_wide = _create_soft_light_texture(192, 1.35)
 
 	for i in range(ATMOS_RAY_COUNT):
 		var anchor: Vector2 = _top_light_anchor_position(i)
@@ -397,23 +401,6 @@ func _setup_lighting_nodes() -> void:
 	center_ceiling_beam.energy = 0.68
 	center_ceiling_beam.texture_scale = 2.48
 	lighting_root.add_child(center_ceiling_beam)
-
-	center_ceiling_core = PointLight2D.new()
-	center_ceiling_core.texture = light_texture_wide
-	center_ceiling_core.position = center_anchor + Vector2(0.0, 370.0)
-	center_ceiling_core.scale = Vector2(0.46, 5.25)
-	center_ceiling_core.color = Color(0.82, 0.92, 1.0, 1.0)
-	center_ceiling_core.energy = 0.82
-	center_ceiling_core.texture_scale = 1.9
-	lighting_root.add_child(center_ceiling_core)
-
-	center_ceiling_haze = PointLight2D.new()
-	center_ceiling_haze.texture = light_texture_soft
-	center_ceiling_haze.position = center_anchor + Vector2(0.0, 292.0)
-	center_ceiling_haze.color = Color(0.7, 0.84, 1.0, 1.0)
-	center_ceiling_haze.energy = 0.42
-	center_ceiling_haze.texture_scale = 2.45
-	lighting_root.add_child(center_ceiling_haze)
 
 	for i in range(3):
 		var menu_color: Color = Color(0.34, 0.72, 1.0, 1.0)
@@ -1038,10 +1025,13 @@ func _upgrade_slot_rect(slot: int) -> Rect2:
 	var gap: float = 16.0
 	var total_width: float = width * 3.0 + gap * 2.0
 	var start_x: float = (view_size.x - total_width) * 0.5
-	var y: float = view_size.y * 0.57
+	var y: float = (view_size.y - height) * 0.5
 	return Rect2(Vector2(start_x + float(slot) * (width + gap), y), Vector2(width, height))
 
 func _camera_target_position() -> Vector2:
+	if start_selection_active:
+		return arena_rect.get_center()
+
 	if halo_index >= 0 and halo_index < heroes.size() and heroes[halo_index].health > 0.0:
 		return heroes[halo_index].global_position
 
@@ -1061,6 +1051,9 @@ func _update_camera(delta: float) -> void:
 	var target: Vector2 = _camera_target_position()
 	var follow_t: float = clampf(CAMERA_FOLLOW_SMOOTH * delta, 0.0, 1.0)
 	world_camera.position = world_camera.position.lerp(target, follow_t)
+	var target_zoom: Vector2 = CAMERA_ZOOM_MENU if start_selection_active else CAMERA_ZOOM_GAME
+	var zoom_t: float = clampf(CAMERA_ZOOM_SMOOTH * delta, 0.0, 1.0)
+	world_camera.zoom = world_camera.zoom.lerp(target_zoom, zoom_t)
 
 func _view_origin() -> Vector2:
 	return _screen_to_world(Vector2.ZERO)
@@ -1236,6 +1229,11 @@ func _upgrade_description(upgrade_id: int) -> String:
 	return ""
 
 func _update_ui() -> void:
+	var view_size: Vector2 = _viewport_size()
+	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	hint_label.size = Vector2(maxf(320.0, view_size.x - 20.0), hint_label.size.y)
+	hint_label.position = Vector2(10.0, view_size.y - 36.0)
+
 	if start_selection_active:
 		wave_label.text = ""
 		threat_label.text = ""
@@ -1465,13 +1463,13 @@ func _draw_soft_shadow(center: Vector2, direction: Vector2, length: float, width
 	var dir: Vector2 = direction.normalized()
 	if dir.length_squared() <= 0.0001:
 		dir = Vector2(0.0, 1.0)
-	for i in range(4):
-		var t: float = float(i) / 3.0
+	for i in range(3):
+		var t: float = float(i) / 2.0
 		var layer_center: Vector2 = center + dir * (length * 0.08 * t)
 		var layer_len: float = length * (1.0 - t * 0.28)
 		var layer_wid: float = width * (1.0 - t * 0.44)
 		var layer_alpha: float = alpha * (1.0 - t * 0.62)
-		_draw_oriented_soft_ellipse(layer_center, dir, layer_len, layer_wid, Color(tint.r, tint.g, tint.b, layer_alpha), 28)
+		_draw_oriented_soft_ellipse(layer_center, dir, layer_len, layer_wid, Color(tint.r, tint.g, tint.b, layer_alpha), 20)
 
 func _top_light_anchor_position(index: int) -> Vector2:
 	var t: float = (float(index) + 0.5) / float(max(1, ATMOS_RAY_COUNT))
@@ -1522,7 +1520,8 @@ func _draw_floor_pattern(view_rect: Rect2) -> void:
 
 			var outline := PackedVector2Array([diamond[0], diamond[1], diamond[2], diamond[3], diamond[0]])
 			var line_alpha: float = 0.12 if parity == 0 else 0.07
-			draw_polyline(outline, Color(0.77, 0.67, 0.42, line_alpha), 1.1)
+			if ((int(floor(float(x) / tile)) + int(floor(float(y) / tile))) % 3) == 0:
+				draw_polyline(outline, Color(0.77, 0.67, 0.42, line_alpha), 1.1)
 
 func _draw_boundary_walls() -> void:
 	var top_y: float = arena_rect.position.y

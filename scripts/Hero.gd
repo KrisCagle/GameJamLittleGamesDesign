@@ -7,6 +7,8 @@ const HERO_SHEET_FRAME_COUNT := 8
 const KNIGHT_SPRITE_PATH := "res://assets/heroes/tank_idle.png"
 const RANGER_SPRITE_PATH := "res://assets/heroes/ranger_idle.png"
 const ROGUE_SPRITE_PATH := "res://assets/heroes/rogue_idle.png"
+const HERO_SIZE_MULT := 1.4
+const HERO_MOVE_SPEED_MULT := 1.16
 
 var kind: int = HeroKind.KNIGHT
 var hero_name: String = "Knight"
@@ -97,6 +99,8 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 			preferred_distance = 94.0
 
 	health = max_health
+	move_speed *= HERO_MOVE_SPEED_MULT
+	body_radius *= HERO_SIZE_MULT
 	attack_timer = randf_range(0.12, 0.5)
 	pull_pulse_timer = randf_range(0.2, 0.7)
 	support_pulse_timer = randf_range(0.3, 0.95)
@@ -549,11 +553,11 @@ func _hero_sprite_path_for_kind(hero_kind: int) -> String:
 func _hero_sprite_scale_for_kind(hero_kind: int) -> Vector2:
 	match hero_kind:
 		HeroKind.KNIGHT:
-			return Vector2(0.95, 0.95)
+			return Vector2(0.95, 0.95) * HERO_SIZE_MULT
 		HeroKind.RANGER:
-			return Vector2(0.72, 0.72)
+			return Vector2(0.72, 0.72) * HERO_SIZE_MULT
 		HeroKind.ROGUE:
-			return Vector2(0.72, 0.72)
+			return Vector2(0.72, 0.72) * HERO_SIZE_MULT
 	return Vector2.ONE
 
 func _ensure_hero_sprite() -> void:

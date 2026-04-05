@@ -2,6 +2,8 @@ extends Node2D
 class_name Enemy
 
 enum EnemyKind { SWARM, RANGED, ELITE, BOSS }
+const SWARM_SPRITE_PATH := "res://assets/enemies/enemy_swarm_attack.webp"
+const SWARM_ANIM_NAME := "attack"
 
 var kind: int = EnemyKind.SWARM
 
@@ -32,6 +34,7 @@ var boss_window_timer: float = 0.0
 var boss_window_duration: float = 0.0
 var boss_window_active: bool = false
 var boss_time_alive: float = 0.0
+var swarm_sprite: AnimatedSprite2D = null
 
 func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, wave_strength: int = 1) -> void:
 	kind = enemy_kind
@@ -49,6 +52,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			attack_cooldown = 0.78
 			body_radius = 8.0
 			body_color = Color(0.96, 0.34, 0.34)
+			_ensure_swarm_sprite()
 		EnemyKind.RANGED:
 			max_health = 56.0 + float(wave_level) * 1.6
 			health = max_health
@@ -58,6 +62,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			attack_cooldown = 1.02
 			body_radius = 11.0
 			body_color = Color(0.98, 0.72, 0.27)
+			_hide_swarm_sprite()
 		EnemyKind.ELITE:
 			max_health = 120.0 + float(wave_level) * 5.2
 			health = max_health
@@ -70,6 +75,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			elite_window_timer = randf_range(2.2, 3.6)
 			elite_window_duration = 0.0
 			elite_window_active = false
+			_hide_swarm_sprite()
 		EnemyKind.BOSS:
 			max_health = 600.0 + float(max(0, wave_level - 5)) * 34.0
 			health = max_health
@@ -86,6 +92,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			boss_window_duration = 0.0
 			boss_window_active = false
 			boss_time_alive = 0.0
+			_hide_swarm_sprite()
 
 	attack_timer = randf_range(0.0, attack_cooldown)
 	target_refresh_timer = randf_range(1.0, 2.1)
@@ -115,6 +122,8 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 	var to_target: Vector2 = target_hero.global_position - global_position
 	var dist: float = to_target.length()
 	var direction: Vector2 = to_target.normalized() if dist > 0.001 else Vector2.ZERO
+	if kind == EnemyKind.SWARM and swarm_sprite != null and absf(direction.x) > 0.01:
+		swarm_sprite.flip_h = direction.x < 0.0
 	var velocity: Vector2 = Vector2.ZERO
 
 	match kind:
@@ -253,6 +262,49 @@ func _retarget(heroes: Array[Hero]) -> void:
 
 	target_hero = alive_heroes[randi() % alive_heroes.size()]
 
+func _ensure_swarm_sprite() -> void:
+	if swarm_sprite != null:
+		swarm_sprite.visible = true
+		if not swarm_sprite.is_playing():
+			swarm_sprite.play(SWARM_ANIM_NAME)
+		return
+
+	var texture: Texture2D = load(SWARM_SPRITE_PATH)
+	if texture == null:
+		return
+
+	var frame_count: int = maxi(1, int(floor(float(texture.get_width()) / maxf(float(texture.get_height()), 1.0))))
+	frame_count = clampi(frame_count, 1, 12)
+	var frame_width: int = int(floor(float(texture.get_width()) / float(frame_count)))
+	if frame_width <= 0:
+		return
+
+	var frames: SpriteFrames = SpriteFrames.new()
+	frames.add_animation(SWARM_ANIM_NAME)
+	frames.set_animation_loop(SWARM_ANIM_NAME, true)
+	frames.set_animation_speed(SWARM_ANIM_NAME, 9.0)
+
+	for i in range(frame_count):
+		var atlas: AtlasTexture = AtlasTexture.new()
+		atlas.atlas = texture
+		atlas.region = Rect2(i * frame_width, 0, frame_width, texture.get_height())
+		atlas.filter_clip = true
+		frames.add_frame(SWARM_ANIM_NAME, atlas)
+
+	swarm_sprite = AnimatedSprite2D.new()
+	swarm_sprite.name = "SwarmSprite"
+	swarm_sprite.sprite_frames = frames
+	swarm_sprite.animation = SWARM_ANIM_NAME
+	swarm_sprite.centered = true
+	swarm_sprite.z_index = 3
+	swarm_sprite.scale = Vector2(1.15, 1.15)
+	add_child(swarm_sprite)
+	swarm_sprite.play(SWARM_ANIM_NAME)
+
+func _hide_swarm_sprite() -> void:
+	if swarm_sprite != null:
+		swarm_sprite.visible = false
+
 func _emit_boss_projectile_ring(projectile_spawns: Array[Dictionary]) -> void:
 	var phase: int = clampi(int(floor(boss_time_alive / 18.0)), 0, 5)
 	var projectile_count: int = 18 + phase * 2
@@ -344,7 +396,9 @@ func _draw() -> void:
 	if kind == EnemyKind.BOSS and boss_window_active:
 		draw_color = Color(1.0, 0.74, 0.52)
 
-	draw_circle(Vector2.ZERO, body_radius, draw_color)
+	var draw_swarm_body: bool = not (kind == EnemyKind.SWARM and swarm_sprite != null and swarm_sprite.visible)
+	if draw_swarm_body:
+		draw_circle(Vector2.ZERO, body_radius, draw_color)
 
 	if kind == EnemyKind.ELITE and elite_window_active:
 		draw_arc(Vector2.ZERO, body_radius + 6.0, 0.0, TAU, 32, Color(1.0, 0.95, 0.6, 0.8), 2.0)

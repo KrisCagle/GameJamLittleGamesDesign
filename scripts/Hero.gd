@@ -2,6 +2,11 @@ extends Node2D
 class_name Hero
 
 enum HeroKind { KNIGHT, RANGER, ROGUE }
+const HERO_ANIM_NAME := "idle"
+const HERO_SHEET_FRAME_COUNT := 8
+const KNIGHT_SPRITE_PATH := "res://assets/heroes/tank_idle.png"
+const RANGER_SPRITE_PATH := "res://assets/heroes/ranger_idle.png"
+const ROGUE_SPRITE_PATH := "res://assets/heroes/rogue_idle.png"
 
 var kind: int = HeroKind.KNIGHT
 var hero_name: String = "Knight"
@@ -29,6 +34,8 @@ var melee_swing_half_angle: float = 0.0
 var melee_swing_reach: float = 0.0
 var melee_swing_direction: Vector2 = Vector2.RIGHT
 var melee_swing_color: Color = Color(1.0, 1.0, 1.0, 0.9)
+var hero_sprite: AnimatedSprite2D = null
+var facing_left: bool = false
 
 var rogue_halo_damage_bonus_mult: float = 0.0
 var rogue_halo_speed_bonus_mult: float = 0.0
@@ -48,6 +55,10 @@ const RANGER_HEAL_PULSE_DURATION := 0.56
 const PARTY_SOFT_RADIUS := 165.0
 const PARTY_HARD_RADIUS := 245.0
 const PARTY_COHESION_BLEND := 0.68
+const HEALER_ANCHOR_SOFT_MIN := 120.0
+const HEALER_ANCHOR_HARD_MIN := 180.0
+const HEALER_ANCHOR_BLEND := 0.74
+const WALL_SLIDE_MARGIN := 18.0
 
 func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	kind = hero_kind
@@ -100,6 +111,9 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	ranger_heal_visual_radius = 0.0
 	ranger_heal_pulse_timer = 0.0
 	ranger_heal_pulse_phase = randf() * TAU
+	facing_left = false
+	_ensure_hero_sprite()
+	_sync_hero_sprite_visuals()
 	queue_redraw()
 
 func process_tick(delta: float, enemies: Array[Enemy], heroes: Array[Hero], arena_rect: Rect2, projectile_spawns: Array[Dictionary], player_move_input: Vector2) -> void:
@@ -151,6 +165,8 @@ func _move_player_controlled(delta: float, player_move_input: Vector2, enemies: 
 		velocity += dodge * move_speed * 0.35
 	if velocity.length() > move_speed * 1.45:
 		velocity = velocity.normalized() * move_speed * 1.45
+	_update_facing_from_velocity(velocity)
+	velocity = _apply_wall_slide(velocity, arena_rect)
 
 	global_position += velocity * delta
 	global_position.x = clampf(global_position.x, arena_rect.position.x + body_radius, arena_rect.end.x - body_radius)
@@ -228,6 +244,7 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 
 	# Keep non-controlled heroes feeling like a party: chase threats, but snap back when too spread.
 	velocity = _apply_party_cohesion(velocity, heroes)
+	velocity = _apply_healer_anchor(velocity, heroes)
 
 	var dodge: Vector2 = _compute_enemy_avoidance(enemies)
 	if dodge.length_squared() > 0.0001:
@@ -243,6 +260,8 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 
 	if velocity.length() > move_speed * 1.45:
 		velocity = velocity.normalized() * move_speed * 1.45
+	_update_facing_from_velocity(velocity)
+	velocity = _apply_wall_slide(velocity, arena_rect)
 
 	global_position += velocity * delta
 	global_position.x = clampf(global_position.x, arena_rect.position.x + body_radius, arena_rect.end.x - body_radius)
@@ -295,6 +314,7 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 	var attack_dir: Vector2 = (target.global_position - global_position).normalized()
 	if attack_dir.length_squared() <= 0.0001:
 		attack_dir = Vector2.RIGHT
+	_update_facing_from_velocity(attack_dir)
 
 	var melee_reach: float = attack_range + body_radius + 4.0
 	var melee_half_angle: float = deg_to_rad(46.0)
@@ -419,6 +439,14 @@ func _find_halo_anchor(heroes: Array[Hero]) -> Hero:
 			return hero
 	return null
 
+func _find_active_ranger_healer(heroes: Array[Hero]) -> Hero:
+	for hero: Hero in heroes:
+		if hero.health <= 0.0:
+			continue
+		if hero.kind == HeroKind.RANGER and hero.has_halo:
+			return hero
+	return null
+
 func _apply_party_cohesion(base_velocity: Vector2, heroes: Array[Hero]) -> Vector2:
 	var alive_count: int = 0
 	var center: Vector2 = Vector2.ZERO
@@ -445,6 +473,33 @@ func _apply_party_cohesion(base_velocity: Vector2, heroes: Array[Hero]) -> Vecto
 	var regroup_velocity: Vector2 = regroup_dir * move_speed * (0.72 + t * 0.3)
 	return base_velocity.lerp(regroup_velocity, clampf(PARTY_COHESION_BLEND * t + 0.18, 0.0, 0.9))
 
+func _apply_healer_anchor(base_velocity: Vector2, heroes: Array[Hero]) -> Vector2:
+	if has_halo:
+		return base_velocity
+
+	var healer: Hero = _find_active_ranger_healer(heroes)
+	if healer == null or healer == self:
+		return base_velocity
+
+	var to_healer: Vector2 = healer.global_position - global_position
+	var dist: float = to_healer.length()
+	if dist <= 0.001:
+		return base_velocity
+
+	var heal_radius: float = maxf(float(healer.ranger_heal_visual_radius), 0.0)
+	var soft_radius: float = maxf(HEALER_ANCHOR_SOFT_MIN, heal_radius * 0.64)
+	var hard_radius: float = maxf(HEALER_ANCHOR_HARD_MIN, heal_radius * 0.9)
+	if dist <= soft_radius:
+		return base_velocity
+
+	var dir: Vector2 = to_healer.normalized()
+	if dist >= hard_radius:
+		return dir * move_speed * 1.1
+
+	var t: float = (dist - soft_radius) / maxf(hard_radius - soft_radius, 0.01)
+	var regroup_velocity: Vector2 = dir * move_speed * (0.74 + t * 0.26)
+	return base_velocity.lerp(regroup_velocity, clampf(HEALER_ANCHOR_BLEND * t + 0.15, 0.0, 0.92))
+
 func _compute_enemy_avoidance(enemies: Array[Enemy]) -> Vector2:
 	var steering := Vector2.ZERO
 	for enemy: Enemy in enemies:
@@ -462,6 +517,106 @@ func _compute_enemy_avoidance(enemies: Array[Enemy]) -> Vector2:
 		steering = steering.normalized()
 	return steering
 
+func _apply_wall_slide(base_velocity: Vector2, arena_rect: Rect2) -> Vector2:
+	var velocity: Vector2 = base_velocity
+	var min_x: float = arena_rect.position.x + body_radius
+	var max_x: float = arena_rect.end.x - body_radius
+	var min_y: float = arena_rect.position.y + body_radius
+	var max_y: float = arena_rect.end.y - body_radius
+
+	if global_position.x <= min_x + WALL_SLIDE_MARGIN and velocity.x < 0.0:
+		velocity.x = 0.0
+	elif global_position.x >= max_x - WALL_SLIDE_MARGIN and velocity.x > 0.0:
+		velocity.x = 0.0
+
+	if global_position.y <= min_y + WALL_SLIDE_MARGIN and velocity.y < 0.0:
+		velocity.y = 0.0
+	elif global_position.y >= max_y - WALL_SLIDE_MARGIN and velocity.y > 0.0:
+		velocity.y = 0.0
+
+	return velocity
+
+func _hero_sprite_path_for_kind(hero_kind: int) -> String:
+	match hero_kind:
+		HeroKind.KNIGHT:
+			return KNIGHT_SPRITE_PATH
+		HeroKind.RANGER:
+			return RANGER_SPRITE_PATH
+		HeroKind.ROGUE:
+			return ROGUE_SPRITE_PATH
+	return ""
+
+func _hero_sprite_scale_for_kind(hero_kind: int) -> Vector2:
+	match hero_kind:
+		HeroKind.KNIGHT:
+			return Vector2(0.95, 0.95)
+		HeroKind.RANGER:
+			return Vector2(0.72, 0.72)
+		HeroKind.ROGUE:
+			return Vector2(0.72, 0.72)
+	return Vector2.ONE
+
+func _ensure_hero_sprite() -> void:
+	if hero_sprite != null:
+		if not hero_sprite.is_playing():
+			hero_sprite.play(HERO_ANIM_NAME)
+		return
+
+	var texture: Texture2D = load(_hero_sprite_path_for_kind(kind))
+	if texture == null:
+		return
+
+	var tex_w: int = texture.get_width()
+	var tex_h: int = texture.get_height()
+	if tex_w <= 0 or tex_h <= 0:
+		return
+
+	var frame_count: int = HERO_SHEET_FRAME_COUNT
+	if tex_w % HERO_SHEET_FRAME_COUNT != 0:
+		frame_count = maxi(1, int(round(float(tex_w) / maxf(float(tex_h), 1.0))))
+	frame_count = clampi(frame_count, 1, 16)
+	var frame_width: int = int(floor(float(tex_w) / float(frame_count)))
+	if frame_width <= 0:
+		return
+
+	var frames: SpriteFrames = SpriteFrames.new()
+	frames.add_animation(HERO_ANIM_NAME)
+	frames.set_animation_loop(HERO_ANIM_NAME, true)
+	frames.set_animation_speed(HERO_ANIM_NAME, 10.0)
+	for i in range(frame_count):
+		var atlas: AtlasTexture = AtlasTexture.new()
+		atlas.atlas = texture
+		atlas.region = Rect2(i * frame_width, 0, frame_width, tex_h)
+		atlas.filter_clip = true
+		frames.add_frame(HERO_ANIM_NAME, atlas)
+
+	hero_sprite = AnimatedSprite2D.new()
+	hero_sprite.name = "HeroSprite"
+	hero_sprite.centered = true
+	hero_sprite.z_index = 0
+	hero_sprite.show_behind_parent = true
+	hero_sprite.sprite_frames = frames
+	hero_sprite.animation = HERO_ANIM_NAME
+	hero_sprite.scale = _hero_sprite_scale_for_kind(kind)
+	add_child(hero_sprite)
+	hero_sprite.play(HERO_ANIM_NAME)
+
+func _update_facing_from_velocity(velocity: Vector2) -> void:
+	if velocity.x > 0.01:
+		facing_left = false
+	elif velocity.x < -0.01:
+		facing_left = true
+	_sync_hero_sprite_visuals()
+
+func _sync_hero_sprite_visuals() -> void:
+	if hero_sprite == null:
+		return
+	hero_sprite.flip_h = facing_left
+	if health <= 0.0:
+		hero_sprite.modulate = Color(0.34, 0.34, 0.34, 0.95)
+	else:
+		hero_sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
+
 func apply_damage(amount: float) -> void:
 	if health <= 0.0:
 		return
@@ -474,12 +629,14 @@ func apply_damage(amount: float) -> void:
 	elif kind == HeroKind.KNIGHT:
 		incoming *= 0.88
 	health = maxf(0.0, health - incoming)
+	_sync_hero_sprite_visuals()
 	queue_redraw()
 
 func heal(amount: float) -> void:
 	if health <= 0.0:
 		return
 	health = minf(max_health, health + maxf(amount, 0.0))
+	_sync_hero_sprite_visuals()
 	queue_redraw()
 
 func add_max_health(amount: float) -> void:
@@ -507,6 +664,7 @@ func trigger_halo_switch_feedback() -> void:
 
 func process_visual_tick(delta: float) -> void:
 	visual_time += delta
+	_sync_hero_sprite_visuals()
 	var need_redraw := false
 	if switch_flash_timer > 0.0:
 		switch_flash_timer = maxf(0.0, switch_flash_timer - delta)
@@ -560,7 +718,9 @@ func _draw() -> void:
 	var color := body_color
 	if health <= 0.0:
 		color = Color(0.2, 0.2, 0.2, 0.95)
-	draw_circle(Vector2.ZERO, body_radius, color)
+	var draw_body: bool = hero_sprite == null
+	if draw_body:
+		draw_circle(Vector2.ZERO, body_radius, color)
 
 	if has_halo and health > 0.0:
 		draw_arc(Vector2.ZERO, body_radius + 8.0, 0.0, TAU, 36, Color(1.0, 0.95, 0.45), 4.0)

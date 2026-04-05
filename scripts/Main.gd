@@ -27,7 +27,6 @@ const UPGRADE_ROGUE_PRECISION := 8
 const UPGRADE_TEAM_TRAINING := 9
 const UPGRADE_GOLDEN_SURGE := 10
 
-const VIEW_SIZE := Vector2(1280, 720)
 const WORLD_SIZE := Vector2(3200, 2200)
 const ARENA_MARGIN := 44.0
 const CAMERA_FOLLOW_SMOOTH := 7.5
@@ -39,6 +38,18 @@ const HALO_RECHARGE_DELAY := 3.0
 const HALO_MIN_CHARGE_TO_EQUIP := 16.0
 const HALO_TOGGLE_LOCK := 0.22
 const HALO_SWITCH_FEEDBACK_DURATION := 0.24
+const HERO_CARD_FRAME_COUNT := 8
+const HERO_CARD_TANK_SHEET := "res://assets/heroes/tank_idle.png"
+const HERO_CARD_RANGER_SHEET := "res://assets/heroes/ranger_idle.png"
+const HERO_CARD_ROGUE_SHEET := "res://assets/heroes/rogue_idle.png"
+const START_MENU_TITLE_FONT_PATH := "res://assets/fonts/Starstruck.ttf"
+const FLOOR_TILE_SIZE := 84.0
+const FLOOR_PATTERN_PAD := 220.0
+const WALL_FRAME_THICKNESS := 34.0
+const VIGNETTE_RINGS := 6
+const HERO_CONTRAST_BASE_RADIUS := 34.0
+const ATMOS_RAY_COUNT := 6
+const ATMOS_RAY_EDGE_INSET := 140.0
 
 @onready var heroes_root: Node2D = $Heroes
 @onready var enemies_root: Node2D = $Enemies
@@ -57,8 +68,8 @@ var projectiles: Array[Projectile] = []
 var projectile_spawns: Array[Dictionary] = []
 var summon_spawns: Array[Dictionary] = []
 
-var halo_index: int = 0
-var halo_equipped: bool = true
+var halo_index: int = -1
+var halo_equipped: bool = false
 var halo_charge: float = HALO_CHARGE_MAX
 var halo_recharge_delay_timer: float = 0.0
 var halo_toggle_lock_timer: float = 0.0
@@ -85,6 +96,7 @@ var waiting_for_next_wave: bool = false
 var intermission_timer: float = 0.0
 
 var game_over: bool = false
+var start_selection_active: bool = true
 var upgrade_phase_active: bool = false
 var upgrade_choices: Array[int] = []
 var upgrade_levels: Dictionary = {}
@@ -95,6 +107,21 @@ var ranger_halo_heal_radius: float = 165.0
 var knight_taunt_radius: float = 240.0
 var knight_pull_radius: float = 220.0
 var knight_guard_heal_per_sec: float = 4.0
+var start_card_frames: Dictionary = {}
+var start_menu_title_font: Font = null
+var lighting_root: Node2D = null
+var light_texture_soft: Texture2D = null
+var light_texture_wide: Texture2D = null
+var top_glow_lights: Array[PointLight2D] = []
+var top_beam_lights: Array[PointLight2D] = []
+var hero_lights: Array[PointLight2D] = []
+var menu_card_glow_lights: Array[PointLight2D] = []
+var menu_card_beam_lights: Array[PointLight2D] = []
+var menu_card_far_beam_lights: Array[PointLight2D] = []
+var center_ceiling_glow: PointLight2D = null
+var center_ceiling_beam: PointLight2D = null
+var center_ceiling_core: PointLight2D = null
+var center_ceiling_haze: PointLight2D = null
 
 func _ready() -> void:
 	randomize()
@@ -111,29 +138,42 @@ func _ready() -> void:
 	upgrade_levels[UPGRADE_GOLDEN_SURGE] = 0
 
 	_spawn_heroes()
-	halo_equipped = true
+	_load_start_card_textures()
+	start_menu_title_font = load(START_MENU_TITLE_FONT_PATH) as Font
+	_setup_lighting_nodes()
+	heroes_root.visible = false
+	halo_index = -1
+	halo_equipped = false
 	halo_charge = HALO_CHARGE_MAX
 	halo_recharge_delay_timer = 0.0
 	halo_toggle_lock_timer = 0.0
-	_set_halo(0)
 	halo_switch_feedback_timer = 0.0
+	_sync_halo_state()
 	world_camera.position = arena_rect.get_center()
 	world_camera.limit_left = int(arena_rect.position.x)
 	world_camera.limit_top = int(arena_rect.position.y)
 	world_camera.limit_right = int(arena_rect.end.x)
 	world_camera.limit_bottom = int(arena_rect.end.y)
-	_start_wave()
 	set_process(true)
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	if start_selection_active:
+		_update_dynamic_lighting(delta)
+		_update_camera(delta)
+		_update_ui()
+		queue_redraw()
+		return
+
 	if game_over:
+		_update_dynamic_lighting(delta)
 		_update_camera(delta)
 		_update_ui()
 		queue_redraw()
 		return
 
 	if upgrade_phase_active:
+		_update_dynamic_lighting(delta)
 		_update_camera(delta)
 		_update_ui()
 		queue_redraw()
@@ -161,12 +201,23 @@ func _process(delta: float) -> void:
 	_validate_halo_target()
 	_check_for_game_over()
 	_progress_wave_timing(delta)
+	_update_dynamic_lighting(delta)
 	_update_camera(delta)
 	_update_ui()
 	queue_redraw()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
+		if start_selection_active:
+			match event.keycode:
+				KEY_1:
+					_choose_starting_hero(0)
+				KEY_2:
+					_choose_starting_hero(1)
+				KEY_3:
+					_choose_starting_hero(2)
+			return
+
 		if game_over and (event.keycode == KEY_ENTER or event.keycode == KEY_R):
 			get_tree().reload_current_scene()
 			return
@@ -176,11 +227,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 		match event.keycode:
 			KEY_1:
-				_set_halo(0)
+				_set_halo(0, false)
 			KEY_2:
-				_set_halo(1)
+				_set_halo(1, false)
 			KEY_3:
-				_set_halo(2)
+				_set_halo(2, false)
 			KEY_SPACE:
 				if halo_equipped:
 					_drop_halo_manual()
@@ -188,10 +239,21 @@ func _unhandled_input(event: InputEvent) -> void:
 					_attempt_halo_reactivate()
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not game_over:
+		if start_selection_active:
+			_choose_starting_hero_from_point(event.position)
+			return
 		if upgrade_phase_active:
 			_choose_upgrade_from_point(event.position)
 			return
-		_set_halo_from_point(_screen_to_world(event.position))
+		var world_point: Vector2 = _screen_to_world(event.position)
+		if event.double_click:
+			if halo_equipped:
+				_drop_halo_manual()
+			else:
+				_set_halo_from_point(world_point)
+				_attempt_halo_reactivate()
+			return
+		_set_halo_from_point(world_point)
 
 func _spawn_heroes() -> void:
 	heroes.clear()
@@ -212,7 +274,7 @@ func _spawn_heroes() -> void:
 	heroes_root.add_child(rogue)
 	heroes.append(rogue)
 
-func _set_halo(index: int) -> void:
+func _set_halo(index: int, allow_reactivate: bool = true) -> void:
 	if index < 0 or index >= heroes.size():
 		return
 	if heroes[index].health <= 0.0:
@@ -221,12 +283,277 @@ func _set_halo(index: int) -> void:
 	var previous_index: int = halo_index
 	halo_index = index
 
-	if not halo_equipped:
+	if not halo_equipped and allow_reactivate:
 		_attempt_halo_reactivate(false)
 
 	_sync_halo_state()
-	if previous_index != halo_index or not heroes[halo_index].has_halo:
+	if _can_project_halo() and (previous_index != halo_index or not heroes[halo_index].has_halo):
 		_on_halo_switched(previous_index, halo_index)
+
+func _load_start_card_textures() -> void:
+	start_card_frames.clear()
+	start_card_frames[HERO_KNIGHT] = _load_start_card_preview_frames(HERO_CARD_TANK_SHEET)
+	start_card_frames[HERO_RANGER] = _load_start_card_preview_frames(HERO_CARD_RANGER_SHEET)
+	start_card_frames[HERO_ROGUE] = _load_start_card_preview_frames(HERO_CARD_ROGUE_SHEET)
+
+func _load_start_card_preview_frames(path: String) -> Array[Texture2D]:
+	var result: Array[Texture2D] = []
+	var sheet: Texture2D = load(path)
+	if sheet == null:
+		return result
+
+	var frame_count: int = HERO_CARD_FRAME_COUNT
+	if sheet.get_width() % HERO_CARD_FRAME_COUNT != 0:
+		frame_count = max(1, int(round(float(sheet.get_width()) / maxf(float(sheet.get_height()), 1.0))))
+	var frame_w: int = int(floor(float(sheet.get_width()) / float(max(1, frame_count))))
+	var frame_h: int = sheet.get_height()
+	if frame_w <= 0 or frame_h <= 0:
+		result.append(sheet)
+		return result
+
+	var sheet_img: Image = sheet.get_image()
+	if sheet_img == null or sheet_img.is_empty():
+		result.append(sheet)
+		return result
+
+	for i in range(max(1, frame_count)):
+		var frame_img: Image = Image.create(frame_w, frame_h, false, sheet_img.get_format())
+		frame_img.blit_rect(sheet_img, Rect2i(i * frame_w, 0, frame_w, frame_h), Vector2i.ZERO)
+		result.append(ImageTexture.create_from_image(frame_img))
+	return result
+
+func _create_soft_light_texture(size: int, exponent: float) -> Texture2D:
+	var tex_size: int = max(16, size)
+	var img: Image = Image.create(tex_size, tex_size, false, Image.FORMAT_RGBA8)
+	var center: Vector2 = Vector2(float(tex_size - 1) * 0.5, float(tex_size - 1) * 0.5)
+	var max_r: float = float(tex_size) * 0.5
+	for y in range(tex_size):
+		for x in range(tex_size):
+			var d: float = Vector2(float(x), float(y)).distance_to(center) / max_r
+			var a: float = 0.0
+			if d < 1.0:
+				a = pow(1.0 - d, exponent)
+			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a))
+	return ImageTexture.create_from_image(img)
+
+func _setup_lighting_nodes() -> void:
+	if lighting_root != null and is_instance_valid(lighting_root):
+		lighting_root.queue_free()
+
+	lighting_root = Node2D.new()
+	lighting_root.name = "Lighting"
+	add_child(lighting_root)
+
+	top_glow_lights.clear()
+	top_beam_lights.clear()
+	hero_lights.clear()
+	menu_card_glow_lights.clear()
+	menu_card_beam_lights.clear()
+	menu_card_far_beam_lights.clear()
+	center_ceiling_glow = null
+	center_ceiling_beam = null
+	center_ceiling_core = null
+	center_ceiling_haze = null
+	light_texture_soft = _create_soft_light_texture(256, 2.05)
+	light_texture_wide = _create_soft_light_texture(256, 1.35)
+
+	for i in range(ATMOS_RAY_COUNT):
+		var anchor: Vector2 = _top_light_anchor_position(i)
+
+		var glow: PointLight2D = PointLight2D.new()
+		glow.texture = light_texture_soft
+		glow.position = anchor + Vector2(0.0, 10.0)
+		glow.color = Color(0.72, 0.86, 1.0, 1.0)
+		glow.energy = 0.66
+		glow.texture_scale = 1.12
+		lighting_root.add_child(glow)
+		top_glow_lights.append(glow)
+
+		var beam: PointLight2D = PointLight2D.new()
+		beam.texture = light_texture_wide
+		beam.position = anchor + Vector2(0.0, 320.0)
+		beam.scale = Vector2(0.72, 3.75)
+		beam.color = Color(0.66, 0.82, 1.0, 1.0)
+		beam.energy = 0.44
+		beam.texture_scale = 2.0
+		lighting_root.add_child(beam)
+		top_beam_lights.append(beam)
+
+	# Center "ceiling" light to give the nave a stronger focal atmosphere.
+	var center_anchor: Vector2 = Vector2(arena_rect.get_center().x, arena_rect.position.y + 26.0)
+	center_ceiling_glow = PointLight2D.new()
+	center_ceiling_glow.texture = light_texture_soft
+	center_ceiling_glow.position = center_anchor
+	center_ceiling_glow.color = Color(0.86, 0.9, 1.0, 1.0)
+	center_ceiling_glow.energy = 1.08
+	center_ceiling_glow.texture_scale = 1.62
+	lighting_root.add_child(center_ceiling_glow)
+
+	center_ceiling_beam = PointLight2D.new()
+	center_ceiling_beam.texture = light_texture_wide
+	center_ceiling_beam.position = center_anchor + Vector2(0.0, 360.0)
+	center_ceiling_beam.scale = Vector2(0.92, 4.85)
+	center_ceiling_beam.color = Color(0.78, 0.88, 1.0, 1.0)
+	center_ceiling_beam.energy = 0.68
+	center_ceiling_beam.texture_scale = 2.48
+	lighting_root.add_child(center_ceiling_beam)
+
+	center_ceiling_core = PointLight2D.new()
+	center_ceiling_core.texture = light_texture_wide
+	center_ceiling_core.position = center_anchor + Vector2(0.0, 370.0)
+	center_ceiling_core.scale = Vector2(0.46, 5.25)
+	center_ceiling_core.color = Color(0.82, 0.92, 1.0, 1.0)
+	center_ceiling_core.energy = 0.82
+	center_ceiling_core.texture_scale = 1.9
+	lighting_root.add_child(center_ceiling_core)
+
+	center_ceiling_haze = PointLight2D.new()
+	center_ceiling_haze.texture = light_texture_soft
+	center_ceiling_haze.position = center_anchor + Vector2(0.0, 292.0)
+	center_ceiling_haze.color = Color(0.7, 0.84, 1.0, 1.0)
+	center_ceiling_haze.energy = 0.42
+	center_ceiling_haze.texture_scale = 2.45
+	lighting_root.add_child(center_ceiling_haze)
+
+	for i in range(3):
+		var menu_color: Color = Color(0.34, 0.72, 1.0, 1.0)
+		match i:
+			1:
+				menu_color = Color(0.94, 0.48, 0.82, 1.0)
+			2:
+				menu_color = Color(0.4, 0.95, 0.72, 1.0)
+
+		var menu_glow: PointLight2D = PointLight2D.new()
+		menu_glow.texture = light_texture_soft
+		menu_glow.color = menu_color.lightened(0.05)
+		menu_glow.texture_scale = 0.98
+		menu_glow.energy = 0.0
+		menu_glow.z_index = -3
+		lighting_root.add_child(menu_glow)
+		menu_card_glow_lights.append(menu_glow)
+
+		var menu_beam: PointLight2D = PointLight2D.new()
+		menu_beam.texture = light_texture_wide
+		menu_beam.color = menu_color
+		menu_beam.scale = Vector2(0.78, 5.9)
+		menu_beam.texture_scale = 2.35
+		menu_beam.energy = 0.0
+		menu_beam.z_index = -3
+		lighting_root.add_child(menu_beam)
+		menu_card_beam_lights.append(menu_beam)
+
+		var menu_far_beam: PointLight2D = PointLight2D.new()
+		menu_far_beam.texture = light_texture_wide
+		menu_far_beam.color = menu_color.lightened(0.24)
+		menu_far_beam.scale = Vector2(1.22, 10.0)
+		menu_far_beam.texture_scale = 2.8
+		menu_far_beam.energy = 0.0
+		menu_far_beam.z_index = -4
+		lighting_root.add_child(menu_far_beam)
+		menu_card_far_beam_lights.append(menu_far_beam)
+
+	for _i in range(heroes.size()):
+		var hl: PointLight2D = PointLight2D.new()
+		hl.texture = light_texture_soft
+		hl.color = Color(0.62, 0.82, 1.0, 1.0)
+		hl.texture_scale = 1.0
+		hl.energy = 0.0
+		hl.enabled = true
+		lighting_root.add_child(hl)
+		hero_lights.append(hl)
+
+func _update_dynamic_lighting(_delta: float) -> void:
+	if lighting_root == null or not is_instance_valid(lighting_root):
+		return
+
+	var t: float = float(Time.get_ticks_msec()) * 0.001
+	var in_start_menu: bool = start_selection_active
+	for i in range(min(top_glow_lights.size(), ATMOS_RAY_COUNT)):
+		var anchor: Vector2 = _top_light_anchor_position(i)
+		var pulse: float = 0.92 + 0.1 * sin(t * 1.3 + float(i) * 0.7)
+		var glow: PointLight2D = top_glow_lights[i]
+		glow.position = anchor + Vector2(0.0, 10.0)
+		glow.energy = 0.0 if in_start_menu else 0.64 * pulse
+
+	for i in range(min(top_beam_lights.size(), ATMOS_RAY_COUNT)):
+		var anchor: Vector2 = _top_light_anchor_position(i)
+		var sway: float = sin(t * 0.62 + float(i) * 0.82) * 6.0
+		var beam: PointLight2D = top_beam_lights[i]
+		beam.position = anchor + Vector2(sway, 320.0)
+		beam.energy = 0.0 if in_start_menu else 0.42 + 0.05 * sin(t * 1.1 + float(i))
+
+	if center_ceiling_glow != null:
+		center_ceiling_glow.position = Vector2(arena_rect.get_center().x, arena_rect.position.y + 26.0)
+		center_ceiling_glow.energy = 0.0 if in_start_menu else 1.02 + 0.14 * sin(t * 0.88)
+	if center_ceiling_beam != null:
+		var center_sway: float = sin(t * 0.54) * 4.5
+		center_ceiling_beam.position = Vector2(arena_rect.get_center().x + center_sway, arena_rect.position.y + 386.0)
+		center_ceiling_beam.energy = 0.0 if in_start_menu else 0.66 + 0.08 * sin(t * 0.7 + 0.6)
+	if center_ceiling_core != null:
+		var core_sway: float = sin(t * 0.48 + 0.9) * 3.0
+		center_ceiling_core.position = Vector2(arena_rect.get_center().x + core_sway, arena_rect.position.y + 398.0)
+		center_ceiling_core.energy = 0.0 if in_start_menu else 0.78 + 0.1 * sin(t * 0.95 + 1.1)
+	if center_ceiling_haze != null:
+		center_ceiling_haze.position = Vector2(arena_rect.get_center().x, arena_rect.position.y + 292.0)
+		center_ceiling_haze.energy = 0.0 if in_start_menu else 0.39 + 0.06 * sin(t * 0.6 + 0.3)
+
+	for i in range(min(menu_card_glow_lights.size(), 3)):
+		var card_rect_screen: Rect2 = _starting_hero_slot_rect(i)
+		var slot_world: Rect2 = _screen_rect_to_world(card_rect_screen)
+		var slot_center_x: float = slot_world.get_center().x
+		var window_anchor_world: Vector2 = _screen_to_world(card_rect_screen.position + Vector2(card_rect_screen.size.x * 0.5, -96.0))
+		var beam_floor_start_y: float = slot_world.end.y + 28.0
+		var menu_glow: PointLight2D = menu_card_glow_lights[i]
+		var menu_beam: PointLight2D = menu_card_beam_lights[i]
+		var menu_far_beam: PointLight2D = menu_card_far_beam_lights[i] if i < menu_card_far_beam_lights.size() else null
+		var phase: float = float(i) * 0.9
+		var speed_scale: float = 1.0 + float(i) * 0.07
+		var breathe_main: float = 0.24 * sin(t * 0.62 * speed_scale + phase)
+		var breathe_secondary: float = 0.12 * sin(t * 1.28 * (0.96 + float(i) * 0.05) + phase * 0.72 + 0.8)
+		var breathe_micro: float = 0.03 * sin(t * 2.85 * (1.0 + float(i) * 0.03) + phase * 1.1)
+		var rand_wobble: float = 0.034 * sin(
+			t * (1.46 + float(i) * 0.19) +
+			phase * 1.87 +
+			0.72 * sin(t * (0.39 + float(i) * 0.03) + float(i) * 2.4)
+		)
+		var candle_flicker: float = clampf(0.96 + breathe_main + breathe_secondary + breathe_micro + rand_wobble, 0.72, 1.28)
+
+		menu_glow.position = window_anchor_world + Vector2(0.0, 22.0)
+		menu_beam.position = Vector2(slot_center_x, beam_floor_start_y + 252.0)
+		if menu_far_beam != null:
+			menu_far_beam.position = Vector2(slot_center_x, beam_floor_start_y + 790.0)
+		if in_start_menu:
+			menu_glow.energy = 0.1 * candle_flicker
+			menu_beam.energy = 1.3 * candle_flicker
+			if menu_far_beam != null:
+				menu_far_beam.energy = 1.22 * candle_flicker
+		else:
+			menu_glow.energy = 0.0
+			menu_beam.energy = 0.0
+			if menu_far_beam != null:
+				menu_far_beam.energy = 0.0
+
+	for i in range(min(hero_lights.size(), heroes.size())):
+		var hero: Hero = heroes[i]
+		var hl: PointLight2D = hero_lights[i]
+		hl.position = hero.global_position + Vector2(0.0, -2.0)
+
+		if start_selection_active or hero.health <= 0.0:
+			hl.energy = 0.0
+			continue
+
+		if hero.has_halo:
+			hl.color = Color(1.0, 0.92, 0.6, 1.0)
+			hl.texture_scale = 1.26
+			hl.energy = 0.68
+		elif hero.is_player_controlled:
+			hl.color = Color(0.68, 0.88, 1.0, 1.0)
+			hl.texture_scale = 1.04
+			hl.energy = 0.34
+		else:
+			hl.color = Color(0.56, 0.76, 1.0, 1.0)
+			hl.texture_scale = 0.86
+			hl.energy = 0.16
 
 func _drop_halo_manual() -> void:
 	if not halo_equipped:
@@ -274,7 +601,7 @@ func _set_halo_from_point(point: Vector2) -> void:
 			closest_index = i
 
 	if closest_index >= 0:
-		_set_halo(closest_index)
+		_set_halo(closest_index, false)
 
 func _start_wave() -> void:
 	wave += 1
@@ -669,13 +996,49 @@ func _roll_upgrade_choices() -> Array[int]:
 	last_upgrade_choices = result.duplicate()
 	return result
 
+func _starting_hero_slot_rect(slot: int) -> Rect2:
+	var view_size: Vector2 = _viewport_size()
+	var width: float = 336.0
+	var height: float = 220.0
+	var gap: float = 24.0
+	var total_width: float = width * 3.0 + gap * 2.0
+	var start_x: float = (view_size.x - total_width) * 0.5
+	var y: float = view_size.y * 0.32
+	return Rect2(Vector2(start_x + float(slot) * (width + gap), y), Vector2(width, height))
+
+func _choose_starting_hero_from_point(screen_point: Vector2) -> void:
+	if not start_selection_active:
+		return
+	for i in range(heroes.size()):
+		if _starting_hero_slot_rect(i).has_point(screen_point):
+			_choose_starting_hero(i)
+			return
+
+func _choose_starting_hero(index: int) -> void:
+	if not start_selection_active:
+		return
+	if index < 0 or index >= heroes.size():
+		return
+	if heroes[index].health <= 0.0:
+		return
+
+	start_selection_active = false
+	heroes_root.visible = true
+	halo_equipped = false
+	halo_charge = halo_charge_cap
+	halo_recharge_delay_timer = 0.0
+	halo_toggle_lock_timer = 0.0
+	_set_halo(index, false)
+	_start_wave()
+
 func _upgrade_slot_rect(slot: int) -> Rect2:
+	var view_size: Vector2 = _viewport_size()
 	var width: float = 318.0
 	var height: float = 124.0
 	var gap: float = 16.0
 	var total_width: float = width * 3.0 + gap * 2.0
-	var start_x: float = (VIEW_SIZE.x - total_width) * 0.5
-	var y: float = VIEW_SIZE.y * 0.57
+	var start_x: float = (view_size.x - total_width) * 0.5
+	var y: float = view_size.y * 0.57
 	return Rect2(Vector2(start_x + float(slot) * (width + gap), y), Vector2(width, height))
 
 func _camera_target_position() -> Vector2:
@@ -700,16 +1063,23 @@ func _update_camera(delta: float) -> void:
 	world_camera.position = world_camera.position.lerp(target, follow_t)
 
 func _view_origin() -> Vector2:
-	return world_camera.position - VIEW_SIZE * 0.5
+	return _screen_to_world(Vector2.ZERO)
 
 func _viewport_rect_world() -> Rect2:
-	return Rect2(_view_origin(), VIEW_SIZE)
+	var size: Vector2 = _viewport_size()
+	return Rect2(_view_origin(), size)
 
 func _screen_to_world(screen_point: Vector2) -> Vector2:
-	return _view_origin() + screen_point
+	var inv_canvas: Transform2D = get_viewport().get_canvas_transform().affine_inverse()
+	return inv_canvas * screen_point
 
 func _screen_rect_to_world(screen_rect: Rect2) -> Rect2:
-	return Rect2(_screen_to_world(screen_rect.position), screen_rect.size)
+	var p0: Vector2 = _screen_to_world(screen_rect.position)
+	var p1: Vector2 = _screen_to_world(screen_rect.position + screen_rect.size)
+	return Rect2(p0, p1 - p0).abs()
+
+func _viewport_size() -> Vector2:
+	return get_viewport_rect().size
 
 func _wrap_text_lines(text: String, max_chars_per_line: int, max_lines: int) -> Array[String]:
 	var words: PackedStringArray = text.split(" ", false)
@@ -866,6 +1236,13 @@ func _upgrade_description(upgrade_id: int) -> String:
 	return ""
 
 func _update_ui() -> void:
+	if start_selection_active:
+		wave_label.text = ""
+		threat_label.text = ""
+		hero_status.text = ""
+		hint_label.text = ""
+		return
+
 	wave_label.text = "Wave %d  |  Time %.1fs  |  Upgrades %d" % [wave, elapsed_time, upgrades_taken]
 
 	var swarm_count: int = 0
@@ -928,12 +1305,14 @@ func _update_ui() -> void:
 			hint_label.text = "Halo dropped. Recharge starts in %.1fs." % [halo_recharge_delay_timer]
 		elif halo_charge < halo_min_activate_charge_value:
 			hint_label.text = "Halo recharging... need %.0f%% to re-equip (SPACE)." % [halo_min_activate_charge_value]
+		elif halo_index < 0:
+			hint_label.text = "Pick a hero with 1/2/3 or click. Then press SPACE or double-click to activate Halo."
 		else:
-			hint_label.text = "Halo ready. Press SPACE or click a hero to re-equip."
+			hint_label.text = "Controlling selected hero without Halo. Press SPACE or double-click to activate."
 	elif waiting_for_next_wave:
 		hint_label.text = "Wave clear. Next wave in %.1f seconds." % [maxf(intermission_timer, 0.0)]
 	else:
-		hint_label.text = "WASD/Arrows move halo hero. Switch with 1/2/3 or click. SPACE drops halo to recharge."
+		hint_label.text = "WASD/Arrows move halo hero. Switch with 1/2/3 or click. SPACE or double-click drops halo."
 
 func _get_player_move_input() -> Vector2:
 	var x: float = 0.0
@@ -953,18 +1332,389 @@ func _get_player_move_input() -> Vector2:
 		input_vec = input_vec.normalized()
 	return input_vec
 
+func _draw_world_backdrop(view_rect: Rect2) -> void:
+	draw_rect(arena_rect.grow(2600.0), Color(0.02, 0.03, 0.06), true)
+	draw_rect(arena_rect, Color(0.05, 0.08, 0.13), true)
+	_draw_floor_pattern(view_rect)
+	_draw_boundary_walls()
+	_draw_central_floor_emblem()
+	_draw_atmospheric_lighting(view_rect)
+
+func _draw_start_menu_backdrop(view_rect: Rect2) -> void:
+	draw_rect(view_rect, Color(0.015, 0.03, 0.065, 1.0), true)
+
+	# Vertical tone bands for a dedicated menu look (separate from the arena floor).
+	var band_count: int = 16
+	for i in range(band_count):
+		var t0: float = float(i) / float(band_count)
+		var t1: float = float(i + 1) / float(band_count)
+		var y0: float = lerpf(view_rect.position.y, view_rect.end.y, t0)
+		var y1: float = lerpf(view_rect.position.y, view_rect.end.y, t1)
+		var band_rect: Rect2 = Rect2(Vector2(view_rect.position.x, y0), Vector2(view_rect.size.x, y1 - y0))
+		var top_col: Color = Color(0.02, 0.07, 0.13, 0.6)
+		var bot_col: Color = Color(0.01, 0.02, 0.05, 0.74)
+		draw_rect(band_rect, top_col.lerp(bot_col, t0), true)
+
+	# Three square stained-glass windows aligned behind the three hero cards.
+	var glass_colors: Array[Color] = [
+		Color(0.24, 0.7, 0.98, 0.5),
+		Color(0.94, 0.46, 0.78, 0.48),
+		Color(0.39, 0.88, 0.74, 0.48),
+		Color(0.94, 0.74, 0.32, 0.46)
+	]
+	for i in range(3):
+		var slot_world: Rect2 = _screen_rect_to_world(_starting_hero_slot_rect(i))
+		var window_w: float = slot_world.size.x * 0.34
+		var window_h: float = slot_world.size.y * 1.02
+		var window_x: float = slot_world.position.x + (slot_world.size.x - window_w) * 0.5
+		var window_y: float = slot_world.position.y - window_h * 0.84
+		var frame_color: Color = Color(0.16, 0.21, 0.31, 0.82)
+		var lead_color: Color = Color(0.82, 0.9, 1.0, 0.3)
+
+		var outer_rect: Rect2 = Rect2(Vector2(window_x, window_y), Vector2(window_w, window_h))
+		draw_rect(outer_rect, frame_color, true)
+		var inner_rect: Rect2 = outer_rect.grow(-7.0)
+		draw_rect(inner_rect, Color(0.09, 0.14, 0.2, 0.62), true)
+
+		var cols: int = 3
+		var rows: int = 2
+		var pane_gap: float = 2.0
+		var pane_w: float = (inner_rect.size.x - pane_gap * float(cols - 1)) / float(cols)
+		var pane_h: float = (inner_rect.size.y - pane_gap * float(rows - 1)) / float(rows)
+		for row in range(rows):
+			for col in range(cols):
+				var px: float = inner_rect.position.x + float(col) * (pane_w + pane_gap)
+				var py: float = inner_rect.position.y + float(row) * (pane_h + pane_gap)
+				var pane: Rect2 = Rect2(Vector2(px, py), Vector2(pane_w, pane_h))
+				var c_idx: int = (i + row + col) % glass_colors.size()
+				draw_rect(pane, glass_colors[c_idx], true)
+				draw_rect(pane.grow(-1.2), Color(0.9, 0.95, 1.0, 0.08), true)
+
+		for col in range(1, cols):
+			var lx: float = inner_rect.position.x + float(col) * (pane_w + pane_gap) - pane_gap * 0.5
+			draw_line(Vector2(lx, inner_rect.position.y), Vector2(lx, inner_rect.end.y), lead_color, 1.4)
+		for row in range(1, rows):
+			var ly: float = inner_rect.position.y + float(row) * (pane_h + pane_gap) - pane_gap * 0.5
+			draw_line(Vector2(inner_rect.position.x, ly), Vector2(inner_rect.end.x, ly), lead_color, 1.4)
+
+	# Subtle rectangular stage wash behind cards.
+	var stage_rect: Rect2 = Rect2(
+		Vector2(view_rect.position.x + view_rect.size.x * 0.1, view_rect.position.y + view_rect.size.y * 0.26),
+		Vector2(view_rect.size.x * 0.8, view_rect.size.y * 0.44)
+	)
+	draw_rect(stage_rect, Color(0.12, 0.24, 0.38, 0.07), true)
+	draw_rect(stage_rect.grow(-36.0), Color(0.1, 0.21, 0.34, 0.04), true)
+
+	# Subtle framing ornaments.
+	draw_rect(view_rect.grow(-24.0), Color(0.78, 0.88, 1.0, 0.1), false, 2.0)
+	draw_rect(view_rect.grow(-44.0), Color(0.56, 0.74, 1.0, 0.07), false, 1.6)
+
+func _draw_readability_pass() -> void:
+	# Slightly dim the busy floor so character silhouettes stand out more.
+	draw_rect(arena_rect, Color(0.0, 0.0, 0.0, 0.12), true)
+
+	for hero: Hero in heroes:
+		if hero.health <= 0.0:
+			continue
+		var nearest_light: Vector2 = _nearest_top_light_anchor(hero.global_position)
+		var away_from_light: Vector2 = (hero.global_position - nearest_light).normalized()
+		if away_from_light.length_squared() <= 0.0001:
+			away_from_light = Vector2(0.0, 1.0)
+		var shadow_dir: Vector2 = away_from_light.lerp(Vector2(0.0, 1.0), 0.36).normalized()
+		if shadow_dir.length_squared() <= 0.0001:
+			shadow_dir = Vector2(0.0, 1.0)
+		var shadow_center: Vector2 = hero.global_position + shadow_dir * (hero.body_radius * 0.44) + Vector2(0.0, hero.body_radius * 0.3)
+		var shadow_length: float = maxf(HERO_CONTRAST_BASE_RADIUS * 0.82, hero.body_radius * 1.66)
+		var shadow_width: float = maxf(HERO_CONTRAST_BASE_RADIUS * 0.4, hero.body_radius * 0.76)
+		if hero.is_player_controlled:
+			shadow_length *= 0.86
+			shadow_width *= 0.86
+		var light_proximity: float = clampf(1.0 - hero.global_position.distance_to(nearest_light) / 920.0, 0.0, 1.0)
+		var shadow_alpha_main: float = lerpf(0.22, 0.11, light_proximity)
+		var shadow_alpha_soft: float = shadow_alpha_main * 0.66
+		var shadow_tint: Color = Color(0.04, 0.06, 0.09, 1.0).lerp(Color(0.16, 0.22, 0.3, 1.0), light_proximity * 0.58)
+		_draw_soft_shadow(shadow_center, shadow_dir, shadow_length, shadow_width, shadow_tint, shadow_alpha_main)
+		_draw_soft_shadow(shadow_center + shadow_dir * 2.0, shadow_dir, shadow_length * 0.68, shadow_width * 0.7, shadow_tint, shadow_alpha_soft)
+
+		# Tiny light catch on the side facing the nearest beam so light/shadow feel connected.
+		var light_catch_center: Vector2 = hero.global_position - away_from_light * (hero.body_radius * 0.42) + Vector2(0.0, hero.body_radius * 0.18)
+		_draw_oriented_soft_ellipse(light_catch_center, shadow_dir, shadow_width * 0.4, shadow_width * 0.22, Color(0.6, 0.78, 1.0, 0.1), 20)
+
+		if hero.is_player_controlled:
+			draw_arc(shadow_center, shadow_width * 1.18, 0.0, TAU, 44, Color(0.72, 0.93, 1.0, 0.2), 2.0)
+		elif hero.has_halo:
+			draw_arc(shadow_center, shadow_width * 1.13, 0.0, TAU, 44, Color(1.0, 0.93, 0.58, 0.18), 1.9)
+
+func _draw_soft_ellipse(center: Vector2, radius_x: float, radius_y: float, color: Color, points: int) -> void:
+	_draw_oriented_soft_ellipse(center, Vector2.RIGHT, radius_x, radius_y, color, points)
+
+func _draw_oriented_soft_ellipse(center: Vector2, axis_dir: Vector2, radius_long: float, radius_short: float, color: Color, points: int) -> void:
+	var dir: Vector2 = axis_dir.normalized()
+	if dir.length_squared() <= 0.0001:
+		dir = Vector2.RIGHT
+	var perp: Vector2 = Vector2(-dir.y, dir.x)
+	var poly := PackedVector2Array()
+	var count: int = max(12, points)
+	for i in range(count):
+		var t: float = TAU * float(i) / float(count)
+		var p: Vector2 = center + dir * (cos(t) * radius_long) + perp * (sin(t) * radius_short)
+		poly.append(p)
+	draw_colored_polygon(poly, color)
+
+func _draw_soft_shadow(center: Vector2, direction: Vector2, length: float, width: float, tint: Color, alpha: float) -> void:
+	var dir: Vector2 = direction.normalized()
+	if dir.length_squared() <= 0.0001:
+		dir = Vector2(0.0, 1.0)
+	for i in range(4):
+		var t: float = float(i) / 3.0
+		var layer_center: Vector2 = center + dir * (length * 0.08 * t)
+		var layer_len: float = length * (1.0 - t * 0.28)
+		var layer_wid: float = width * (1.0 - t * 0.44)
+		var layer_alpha: float = alpha * (1.0 - t * 0.62)
+		_draw_oriented_soft_ellipse(layer_center, dir, layer_len, layer_wid, Color(tint.r, tint.g, tint.b, layer_alpha), 28)
+
+func _top_light_anchor_position(index: int) -> Vector2:
+	var t: float = (float(index) + 0.5) / float(max(1, ATMOS_RAY_COUNT))
+	var sx: float = lerpf(arena_rect.position.x + ATMOS_RAY_EDGE_INSET, arena_rect.end.x - ATMOS_RAY_EDGE_INSET, t)
+	return Vector2(sx, arena_rect.position.y + 24.0)
+
+func _nearest_top_light_anchor(point: Vector2) -> Vector2:
+	var nearest: Vector2 = _top_light_anchor_position(0)
+	var nearest_dist_sq: float = point.distance_squared_to(nearest)
+	for i in range(1, ATMOS_RAY_COUNT):
+		var candidate: Vector2 = _top_light_anchor_position(i)
+		var d: float = point.distance_squared_to(candidate)
+		if d < nearest_dist_sq:
+			nearest_dist_sq = d
+			nearest = candidate
+	return nearest
+
+func _draw_floor_pattern(view_rect: Rect2) -> void:
+	var visible: Rect2 = arena_rect.intersection(view_rect.grow(FLOOR_PATTERN_PAD))
+	if visible.size.x <= 0.0 or visible.size.y <= 0.0:
+		return
+
+	var tile: float = FLOOR_TILE_SIZE
+	var half: float = tile * 0.5
+	var start_x: float = floor(visible.position.x / tile) * tile
+	var start_y: float = floor(visible.position.y / tile) * tile
+	var end_x: float = visible.end.x + tile
+	var end_y: float = visible.end.y + tile
+	var center: Vector2 = arena_rect.get_center()
+
+	for y in range(int(start_y), int(end_y), int(tile)):
+		for x in range(int(start_x), int(end_x), int(tile)):
+			var c: Vector2 = Vector2(float(x) + half, float(y) + half)
+			var parity: int = (int(floor(float(x) / tile)) + int(floor(float(y) / tile))) % 2
+			var dist_ratio: float = clampf(c.distance_to(center) / 1280.0, 0.0, 1.0)
+			var cold: Color = Color(0.08, 0.18, 0.27, 0.9)
+			var warm: Color = Color(0.15, 0.11, 0.08, 0.9)
+			var base_color: Color = cold if parity == 0 else warm
+			base_color = base_color.lerp(Color(0.03, 0.04, 0.06, 0.9), dist_ratio * 0.42)
+
+			var diamond := PackedVector2Array([
+				c + Vector2(0.0, -half),
+				c + Vector2(half, 0.0),
+				c + Vector2(0.0, half),
+				c + Vector2(-half, 0.0)
+			])
+			draw_colored_polygon(diamond, base_color)
+
+			var outline := PackedVector2Array([diamond[0], diamond[1], diamond[2], diamond[3], diamond[0]])
+			var line_alpha: float = 0.12 if parity == 0 else 0.07
+			draw_polyline(outline, Color(0.77, 0.67, 0.42, line_alpha), 1.1)
+
+func _draw_boundary_walls() -> void:
+	var top_y: float = arena_rect.position.y
+	var bottom_y: float = arena_rect.end.y
+	var left_x: float = arena_rect.position.x
+	var right_x: float = arena_rect.end.x
+	var wall_w: float = 54.0
+	var top_wall: Rect2 = Rect2(Vector2(left_x, top_y), Vector2(arena_rect.size.x, wall_w))
+	var bottom_wall: Rect2 = Rect2(Vector2(left_x, bottom_y - wall_w), Vector2(arena_rect.size.x, wall_w))
+	var left_wall: Rect2 = Rect2(Vector2(left_x, top_y), Vector2(wall_w, arena_rect.size.y))
+	var right_wall: Rect2 = Rect2(Vector2(right_x - wall_w, top_y), Vector2(wall_w, arena_rect.size.y))
+
+	# Solid in-arena walls so boundaries are always obvious.
+	draw_rect(top_wall, Color(0.08, 0.11, 0.16, 0.92), true)
+	draw_rect(bottom_wall, Color(0.08, 0.11, 0.16, 0.92), true)
+	draw_rect(left_wall, Color(0.08, 0.11, 0.16, 0.92), true)
+	draw_rect(right_wall, Color(0.08, 0.11, 0.16, 0.92), true)
+
+	# Decorative trims.
+	draw_line(Vector2(left_x, top_y + wall_w), Vector2(right_x, top_y + wall_w), Color(0.72, 0.86, 1.0, 0.52), 2.4)
+	draw_line(Vector2(left_x, bottom_y - wall_w), Vector2(right_x, bottom_y - wall_w), Color(0.72, 0.86, 1.0, 0.52), 2.4)
+	draw_line(Vector2(left_x + wall_w, top_y), Vector2(left_x + wall_w, bottom_y), Color(0.72, 0.86, 1.0, 0.46), 2.2)
+	draw_line(Vector2(right_x - wall_w, top_y), Vector2(right_x - wall_w, bottom_y), Color(0.72, 0.86, 1.0, 0.46), 2.2)
+	draw_rect(arena_rect, Color(0.62, 0.82, 1.0, 0.52), false, 2.2)
+
+	# Repeaters on side walls for structure.
+	for y in range(int(top_y) + 90, int(bottom_y) - 90, 180):
+		draw_rect(Rect2(Vector2(left_x + 8.0, float(y) - 20.0), Vector2(14.0, 40.0)), Color(0.36, 0.44, 0.56, 0.7), true)
+		draw_rect(Rect2(Vector2(right_x - 22.0, float(y) - 20.0), Vector2(14.0, 40.0)), Color(0.36, 0.44, 0.56, 0.7), true)
+
+	# Aligned "windows"/fixtures that match the atmospheric light ray anchors.
+	for i in range(ATMOS_RAY_COUNT):
+		var t: float = (float(i) + 0.5) / float(ATMOS_RAY_COUNT)
+		var sx: float = lerpf(arena_rect.position.x + ATMOS_RAY_EDGE_INSET, arena_rect.end.x - ATMOS_RAY_EDGE_INSET, t)
+		draw_rect(Rect2(Vector2(sx - 24.0, top_y + 8.0), Vector2(48.0, 24.0)), Color(0.5, 0.63, 0.82, 0.66), true)
+		draw_rect(Rect2(Vector2(sx - 17.0, top_y + 14.0), Vector2(34.0, 10.0)), Color(0.74, 0.88, 1.0, 0.78), true)
+		draw_rect(Rect2(Vector2(sx - 20.0, bottom_y - wall_w + 10.0), Vector2(40.0, 14.0)), Color(0.36, 0.44, 0.56, 0.65), true)
+
+func _draw_central_floor_emblem() -> void:
+	var c: Vector2 = arena_rect.get_center()
+	draw_circle(c, 170.0, Color(0.11, 0.17, 0.25, 0.42))
+	draw_arc(c, 170.0, 0.0, TAU, 80, Color(0.8, 0.72, 0.48, 0.6), 3.0)
+	draw_arc(c, 118.0, 0.0, TAU, 72, Color(0.4, 0.66, 0.95, 0.52), 2.0)
+	draw_arc(c, 76.0, 0.0, TAU, 64, Color(0.82, 0.79, 0.66, 0.48), 2.0)
+	for i in range(12):
+		var angle: float = TAU * float(i) / 12.0
+		var dir: Vector2 = Vector2.RIGHT.rotated(angle)
+		draw_line(c + dir * 84.0, c + dir * 160.0, Color(0.74, 0.63, 0.36, 0.36), 1.6)
+
+func _draw_atmospheric_lighting(view_rect: Rect2) -> void:
+	# Real lighting now comes from Light2D nodes. Keep this layer very subtle.
+	draw_rect(arena_rect, Color(0.02, 0.04, 0.08, 0.05), true)
+
+	for i in range(VIGNETTE_RINGS):
+		var inset: float = float(i) * 24.0
+		var ring: Rect2 = view_rect.grow(-inset)
+		if ring.size.x <= 0.0 or ring.size.y <= 0.0:
+			continue
+		var alpha: float = 0.055 * (1.0 - float(i) / float(VIGNETTE_RINGS))
+		draw_rect(ring, Color(0.0, 0.0, 0.0, alpha), false, 26.0)
+
 func _draw() -> void:
 	var view_rect: Rect2 = _viewport_rect_world()
-	draw_rect(arena_rect.grow(2600.0), Color(0.05, 0.07, 0.1), true)
-	draw_rect(arena_rect, Color(0.09, 0.13, 0.18), true)
-	draw_rect(arena_rect, Color(0.42, 0.86, 1.0, 0.9), false, 3.0)
 
-	var right: float = arena_rect.position.x + arena_rect.size.x
-	var bottom: float = arena_rect.position.y + arena_rect.size.y
-	for x in range(int(arena_rect.position.x) + 64, int(right), 64):
-		draw_line(Vector2(x, arena_rect.position.y), Vector2(x, bottom), Color(1, 1, 1, 0.04), 1.0)
-	for y in range(int(arena_rect.position.y) + 64, int(bottom), 64):
-		draw_line(Vector2(arena_rect.position.x, y), Vector2(right, y), Color(1, 1, 1, 0.04), 1.0)
+	if start_selection_active:
+		_draw_start_menu_backdrop(view_rect)
+		draw_rect(view_rect, Color(0.01, 0.03, 0.07, 0.03), true)
+		var hover_screen: Vector2 = get_viewport().get_mouse_position()
+		var card_font: Font = hero_status.get_theme_font("font")
+		if card_font == null:
+			card_font = ThemeDB.fallback_font
+
+		var title_font: Font = start_menu_title_font if start_menu_title_font != null else card_font
+		var title_size: int = 62 if start_menu_title_font != null else 40
+		var first_card_screen: Rect2 = _starting_hero_slot_rect(0)
+		var title_y: float = _screen_to_world(Vector2(0.0, first_card_screen.position.y - 62.0)).y
+		var title_x: float = view_rect.position.x
+		var title_text: String = "Choose Your Starting Hero"
+
+		# Layered shadow + highlight passes to give the title depth and texture.
+		draw_string(
+			title_font,
+			Vector2(title_x + 3.0, title_y + 5.0),
+			title_text,
+			HORIZONTAL_ALIGNMENT_CENTER,
+			view_rect.size.x,
+			title_size,
+			Color(0.0, 0.0, 0.0, 0.72)
+		)
+		draw_string(
+			title_font,
+			Vector2(title_x + 1.0, title_y + 2.0),
+			title_text,
+			HORIZONTAL_ALIGNMENT_CENTER,
+			view_rect.size.x,
+			title_size,
+			Color(0.2, 0.15, 0.08, 0.42)
+		)
+		draw_string(
+			title_font,
+			Vector2(title_x, title_y),
+			title_text,
+			HORIZONTAL_ALIGNMENT_CENTER,
+			view_rect.size.x,
+			title_size,
+			Color(0.95, 0.83, 0.58, 0.98)
+		)
+		draw_string(
+			title_font,
+			Vector2(title_x + 1.0, title_y - 1.0),
+			title_text,
+			HORIZONTAL_ALIGNMENT_CENTER,
+			view_rect.size.x,
+			title_size,
+			Color(1.0, 0.95, 0.78, 0.34)
+		)
+		draw_string(
+			title_font,
+			Vector2(title_x - 1.0, title_y + 1.0),
+			title_text,
+			HORIZONTAL_ALIGNMENT_CENTER,
+			view_rect.size.x,
+			title_size,
+			Color(0.52, 0.34, 0.16, 0.2)
+		)
+
+		var hero_colors: Array[Color] = [
+			Color(0.36, 0.56, 0.98),
+			Color(0.95, 0.45, 0.75),
+			Color(0.3, 0.95, 0.65)
+		]
+		var hero_titles: Array[String] = [
+			"1. Tank",
+			"2. Ranger",
+			"3. Rogue"
+		]
+		for i in range(heroes.size()):
+			var rect_screen: Rect2 = _starting_hero_slot_rect(i)
+			var is_hover: bool = rect_screen.has_point(hover_screen)
+			var rect: Rect2 = _screen_rect_to_world(rect_screen)
+			var base_color: Color = Color(0.09, 0.14, 0.22, 0.96)
+			if is_hover:
+				base_color = Color(0.15, 0.22, 0.32, 0.98)
+			draw_rect(rect, base_color, true)
+			draw_rect(rect.grow(-3.0), Color(0.0, 0.0, 0.0, 0.12), true)
+			draw_rect(rect, Color(0.9, 0.95, 1.0, 0.78), false, 2.2)
+			var icon_size: Vector2 = Vector2(92.0, 92.0)
+			var icon_rect: Rect2 = Rect2(
+				rect.position + Vector2((rect.size.x - icon_size.x) * 0.5, 12.0),
+				icon_size
+			)
+			var frame_list_variant: Variant = start_card_frames.get(i, [])
+			var frame_list: Array = frame_list_variant as Array
+			if not frame_list.is_empty():
+				var tick: int = int(floor(Time.get_ticks_msec() / 110.0))
+				var frame_idx: int = posmod(tick, frame_list.size())
+				var hero_tex: Texture2D = frame_list[frame_idx] as Texture2D
+				if hero_tex != null:
+					draw_texture_rect(hero_tex, icon_rect, false, Color(1.0, 1.0, 1.0, 1.0))
+				else:
+					draw_circle(icon_rect.position + icon_rect.size * 0.5, 20.0, hero_colors[i])
+			else:
+				draw_circle(icon_rect.position + icon_rect.size * 0.5, 20.0, hero_colors[i])
+			draw_string(card_font, rect.position + Vector2(0.0, 122.0), hero_titles[i], HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 22, Color(1.0, 1.0, 1.0, 0.98))
+			var detail_lines: Array[String] = []
+			match i:
+				0:
+					detail_lines = [
+						"Role: Space control / front line",
+						"Attack: Wide melee swipe",
+						"Halo Skill: Taunt + ally guard healing"
+					]
+				1:
+					detail_lines = [
+						"Role: Sustain / pressure support",
+						"Attack: Ranged homing shot",
+						"Halo Skill: Healing pulse aura"
+					]
+				_:
+					detail_lines = [
+						"Role: Burst finisher / clutch",
+						"Attack: Fast melee arcs",
+						"Halo Skill: Speed + damage spike"
+					]
+			var y_line: float = 152.0
+			for line: String in detail_lines:
+				draw_string(card_font, rect.position + Vector2(14.0, y_line), line, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 22.0, 18, Color(0.9, 0.95, 1.0, 0.92))
+				y_line += 30.0
+		return
+
+	_draw_world_backdrop(view_rect)
+	_draw_readability_pass()
 
 	if halo_switch_feedback_timer > 0.0:
 		var t: float = halo_switch_feedback_timer / HALO_SWITCH_FEEDBACK_DURATION
@@ -972,7 +1722,8 @@ func _draw() -> void:
 		draw_line(halo_switch_feedback_from, halo_switch_feedback_to, pulse_color, 6.0 * t)
 		draw_circle(halo_switch_feedback_to, 12.0 + (1.0 - t) * 16.0, Color(1.0, 0.96, 0.58, 0.25 * t))
 
-	var bar_rect_screen: Rect2 = Rect2(Vector2(VIEW_SIZE.x * 0.5 - 160.0, 14.0), Vector2(320.0, 14.0))
+	var view_size: Vector2 = _viewport_size()
+	var bar_rect_screen: Rect2 = Rect2(Vector2(view_size.x * 0.5 - 160.0, 14.0), Vector2(320.0, 14.0))
 	var bar_rect: Rect2 = _screen_rect_to_world(bar_rect_screen)
 	draw_rect(bar_rect, Color(0.04, 0.06, 0.08, 0.9), true)
 	var fill_ratio: float = clampf(halo_charge / maxf(halo_charge_cap, 0.01), 0.0, 1.0)

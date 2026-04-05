@@ -53,6 +53,7 @@ const ATMOS_RAY_EDGE_INSET := 140.0
 const CAMERA_ZOOM_MENU := Vector2(1.0, 1.0)
 const CAMERA_ZOOM_GAME := Vector2(1.34, 1.34)
 const CAMERA_ZOOM_SMOOTH := 8.5
+const WEB_LOW_SPEC_ENABLED := true
 
 @onready var heroes_root: Node2D = $Heroes
 @onready var enemies_root: Node2D = $Enemies
@@ -125,6 +126,7 @@ var center_ceiling_glow: PointLight2D = null
 var center_ceiling_beam: PointLight2D = null
 var center_ceiling_core: PointLight2D = null
 var center_ceiling_haze: PointLight2D = null
+var low_spec_mode: bool = false
 
 func _ready() -> void:
 	randomize()
@@ -143,6 +145,7 @@ func _ready() -> void:
 	_spawn_heroes()
 	_load_start_card_textures()
 	start_menu_title_font = load(START_MENU_TITLE_FONT_PATH) as Font
+	low_spec_mode = WEB_LOW_SPEC_ENABLED and OS.has_feature("web")
 	_setup_lighting_nodes()
 	heroes_root.visible = false
 	halo_index = -1
@@ -344,10 +347,6 @@ func _setup_lighting_nodes() -> void:
 	if lighting_root != null and is_instance_valid(lighting_root):
 		lighting_root.queue_free()
 
-	lighting_root = Node2D.new()
-	lighting_root.name = "Lighting"
-	add_child(lighting_root)
-
 	top_glow_lights.clear()
 	top_beam_lights.clear()
 	hero_lights.clear()
@@ -358,6 +357,17 @@ func _setup_lighting_nodes() -> void:
 	center_ceiling_beam = null
 	center_ceiling_core = null
 	center_ceiling_haze = null
+
+	if low_spec_mode:
+		lighting_root = null
+		light_texture_soft = null
+		light_texture_wide = null
+		return
+
+	lighting_root = Node2D.new()
+	lighting_root.name = "Lighting"
+	add_child(lighting_root)
+
 	light_texture_soft = _create_soft_light_texture(192, 2.05)
 	light_texture_wide = _create_soft_light_texture(192, 1.35)
 
@@ -1333,9 +1343,13 @@ func _get_player_move_input() -> Vector2:
 func _draw_world_backdrop(view_rect: Rect2) -> void:
 	draw_rect(arena_rect.grow(2600.0), Color(0.02, 0.03, 0.06), true)
 	draw_rect(arena_rect, Color(0.05, 0.08, 0.13), true)
-	_draw_floor_pattern(view_rect)
+	if low_spec_mode:
+		draw_rect(arena_rect, Color(0.06, 0.09, 0.14, 0.75), true)
+	else:
+		_draw_floor_pattern(view_rect)
 	_draw_boundary_walls()
-	_draw_central_floor_emblem()
+	if not low_spec_mode:
+		_draw_central_floor_emblem()
 	_draw_atmospheric_lighting(view_rect)
 
 func _draw_start_menu_backdrop(view_rect: Rect2) -> void:
@@ -1408,6 +1422,9 @@ func _draw_start_menu_backdrop(view_rect: Rect2) -> void:
 	draw_rect(view_rect.grow(-44.0), Color(0.56, 0.74, 1.0, 0.07), false, 1.6)
 
 func _draw_readability_pass() -> void:
+	if low_spec_mode:
+		return
+
 	# Slightly dim the busy floor so character silhouettes stand out more.
 	draw_rect(arena_rect, Color(0.0, 0.0, 0.0, 0.12), true)
 

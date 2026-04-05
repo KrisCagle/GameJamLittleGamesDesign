@@ -51,7 +51,7 @@ const HERO_CONTRAST_BASE_RADIUS := 34.0
 const ATMOS_RAY_COUNT := 4
 const ATMOS_RAY_EDGE_INSET := 140.0
 const CAMERA_ZOOM_MENU := Vector2(1.0, 1.0)
-const CAMERA_ZOOM_GAME := Vector2(1.34, 1.34)
+const CAMERA_ZOOM_GAME := Vector2(1.22, 1.22)
 const CAMERA_ZOOM_SMOOTH := 8.5
 const WEB_LOW_SPEC_ENABLED := true
 
@@ -1343,10 +1343,9 @@ func _get_player_move_input() -> Vector2:
 func _draw_world_backdrop(view_rect: Rect2) -> void:
 	draw_rect(arena_rect.grow(2600.0), Color(0.02, 0.03, 0.06), true)
 	draw_rect(arena_rect, Color(0.05, 0.08, 0.13), true)
+	_draw_floor_pattern(view_rect)
 	if low_spec_mode:
-		draw_rect(arena_rect, Color(0.06, 0.09, 0.14, 0.75), true)
-	else:
-		_draw_floor_pattern(view_rect)
+		draw_rect(arena_rect, Color(0.03, 0.05, 0.08, 0.26), true)
 	_draw_boundary_walls()
 	if not low_spec_mode:
 		_draw_central_floor_emblem()

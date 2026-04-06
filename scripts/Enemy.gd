@@ -4,6 +4,11 @@ class_name Enemy
 enum EnemyKind { SWARM, RANGED, ELITE, BOSS }
 const SWARM_SPRITE_PATH := "res://assets/enemies/enemy_swarm_attack.webp"
 const SWARM_ANIM_NAME := "attack"
+const RANGED_WALK_SPRITE_PATH := "res://assets/enemies/enemy_ranged_walk.png"
+const RANGED_ATTACK_SPRITE_PATH := "res://assets/enemies/enemy_ranged_attack.png"
+const RANGED_ANIM_WALK := "walk"
+const RANGED_ANIM_ATTACK := "attack"
+const RANGED_FRAME_COUNT := 5
 const ENEMY_SIZE_MULT := 1.34
 
 var kind: int = EnemyKind.SWARM
@@ -36,6 +41,8 @@ var boss_window_duration: float = 0.0
 var boss_window_active: bool = false
 var boss_time_alive: float = 0.0
 var swarm_sprite: AnimatedSprite2D = null
+var ranged_sprite: AnimatedSprite2D = null
+var ranged_attack_flash_timer: float = 0.0
 
 func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, wave_strength: int = 1) -> void:
 	kind = enemy_kind
@@ -54,16 +61,18 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			body_radius = 8.0
 			body_color = Color(0.96, 0.34, 0.34)
 			_ensure_swarm_sprite()
+			_hide_ranged_sprite()
 		EnemyKind.RANGED:
 			max_health = 56.0 + float(wave_level) * 1.6
 			health = max_health
 			move_speed = 88.0 + float(wave_level) * 0.55
-			attack_range = 198.0
+			attack_range = 242.0
 			damage = 9.5 + float(wave_level) * 0.3
-			attack_cooldown = 1.02
+			attack_cooldown = 0.84
 			body_radius = 11.0
 			body_color = Color(0.98, 0.72, 0.27)
 			_hide_swarm_sprite()
+			_ensure_ranged_sprite()
 		EnemyKind.ELITE:
 			max_health = 120.0 + float(wave_level) * 5.2
 			health = max_health
@@ -77,6 +86,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			elite_window_duration = 0.0
 			elite_window_active = false
 			_hide_swarm_sprite()
+			_hide_ranged_sprite()
 		EnemyKind.BOSS:
 			max_health = 600.0 + float(max(0, wave_level - 5)) * 34.0
 			health = max_health
@@ -94,9 +104,11 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			boss_window_active = false
 			boss_time_alive = 0.0
 			_hide_swarm_sprite()
+			_hide_ranged_sprite()
 
 	attack_timer = randf_range(0.0, attack_cooldown)
 	body_radius *= ENEMY_SIZE_MULT
+	ranged_attack_flash_timer = 0.0
 	target_refresh_timer = randf_range(1.0, 2.1)
 	strafe_dir = -1.0 if randf() < 0.5 else 1.0
 	queue_redraw()
@@ -126,13 +138,15 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 	var direction: Vector2 = to_target.normalized() if dist > 0.001 else Vector2.ZERO
 	if kind == EnemyKind.SWARM and swarm_sprite != null and absf(direction.x) > 0.01:
 		swarm_sprite.flip_h = direction.x < 0.0
+	if kind == EnemyKind.RANGED and ranged_sprite != null and absf(direction.x) > 0.01:
+		ranged_sprite.flip_h = direction.x < 0.0
 	var velocity: Vector2 = Vector2.ZERO
 
 	match kind:
 		EnemyKind.SWARM:
 			velocity = direction * move_speed
 		EnemyKind.RANGED:
-			var desired_dist: float = 188.0
+			var desired_dist: float = 168.0
 			if dist < desired_dist * 0.74:
 				velocity = -direction * move_speed
 			elif dist > desired_dist * 1.2:
@@ -160,6 +174,15 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 	global_position += velocity * delta
 	global_position.x = clampf(global_position.x, arena_rect.position.x + body_radius, arena_rect.end.x - body_radius)
 	global_position.y = clampf(global_position.y, arena_rect.position.y + body_radius, arena_rect.end.y - body_radius)
+	if kind == EnemyKind.RANGED and ranged_attack_flash_timer > 0.0:
+		ranged_attack_flash_timer = maxf(0.0, ranged_attack_flash_timer - delta)
+	if kind == EnemyKind.RANGED and ranged_sprite != null:
+		if ranged_attack_flash_timer > 0.0:
+			if ranged_sprite.animation != RANGED_ANIM_ATTACK:
+				ranged_sprite.play(RANGED_ANIM_ATTACK)
+		else:
+			if ranged_sprite.animation != RANGED_ANIM_WALK:
+				ranged_sprite.play(RANGED_ANIM_WALK)
 
 	if kind == EnemyKind.BOSS:
 		boss_time_alive += delta
@@ -186,14 +209,18 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 		if kind == EnemyKind.RANGED:
 			projectile_spawns.append({
 				"team": "enemy",
+				"style": "enemy_ranged",
 				"position": global_position,
 				"target_position": target_hero.global_position,
 				"damage": damage,
-				"speed": 355.0,
-				"radius": 5.0,
-				"life": 2.2,
+				"speed": 300.0,
+				"radius": 6.2,
+				"life": 2.4,
 				"color": Color(1.0, 0.76, 0.34)
 			})
+			ranged_attack_flash_timer = 0.42
+			if ranged_sprite != null:
+				ranged_sprite.play(RANGED_ANIM_ATTACK)
 		elif kind == EnemyKind.SWARM or kind == EnemyKind.ELITE:
 			var dealt: float = damage
 			if kind == EnemyKind.ELITE and elite_window_active:
@@ -307,6 +334,60 @@ func _hide_swarm_sprite() -> void:
 	if swarm_sprite != null:
 		swarm_sprite.visible = false
 
+func _ensure_ranged_sprite() -> void:
+	if ranged_sprite != null:
+		ranged_sprite.visible = true
+		if not ranged_sprite.is_playing():
+			ranged_sprite.play(RANGED_ANIM_WALK)
+		return
+
+	var walk_texture: Texture2D = load(RANGED_WALK_SPRITE_PATH)
+	var attack_texture: Texture2D = load(RANGED_ATTACK_SPRITE_PATH)
+	if walk_texture == null or attack_texture == null:
+		return
+
+	var walk_frame_width: int = int(floor(float(walk_texture.get_width()) / float(RANGED_FRAME_COUNT)))
+	var walk_frame_height: int = walk_texture.get_height()
+	var attack_frame_width: int = int(floor(float(attack_texture.get_width()) / float(RANGED_FRAME_COUNT)))
+	var attack_frame_height: int = attack_texture.get_height()
+	if walk_frame_width <= 0 or walk_frame_height <= 0 or attack_frame_width <= 0 or attack_frame_height <= 0:
+		return
+
+	var frames: SpriteFrames = SpriteFrames.new()
+	frames.add_animation(RANGED_ANIM_WALK)
+	frames.set_animation_loop(RANGED_ANIM_WALK, true)
+	frames.set_animation_speed(RANGED_ANIM_WALK, 10.0)
+	for i in range(RANGED_FRAME_COUNT):
+		var atlas_walk: AtlasTexture = AtlasTexture.new()
+		atlas_walk.atlas = walk_texture
+		atlas_walk.region = Rect2(i * walk_frame_width, 0, walk_frame_width, walk_frame_height)
+		atlas_walk.filter_clip = true
+		frames.add_frame(RANGED_ANIM_WALK, atlas_walk)
+
+	frames.add_animation(RANGED_ANIM_ATTACK)
+	frames.set_animation_loop(RANGED_ANIM_ATTACK, true)
+	frames.set_animation_speed(RANGED_ANIM_ATTACK, 12.0)
+	for i in range(RANGED_FRAME_COUNT):
+		var atlas_attack: AtlasTexture = AtlasTexture.new()
+		atlas_attack.atlas = attack_texture
+		atlas_attack.region = Rect2(i * attack_frame_width, 0, attack_frame_width, attack_frame_height)
+		atlas_attack.filter_clip = true
+		frames.add_frame(RANGED_ANIM_ATTACK, atlas_attack)
+
+	ranged_sprite = AnimatedSprite2D.new()
+	ranged_sprite.name = "RangedSprite"
+	ranged_sprite.sprite_frames = frames
+	ranged_sprite.animation = RANGED_ANIM_WALK
+	ranged_sprite.centered = true
+	ranged_sprite.z_index = 3
+	ranged_sprite.scale = Vector2(1.24, 1.24) * ENEMY_SIZE_MULT
+	add_child(ranged_sprite)
+	ranged_sprite.play(RANGED_ANIM_WALK)
+
+func _hide_ranged_sprite() -> void:
+	if ranged_sprite != null:
+		ranged_sprite.visible = false
+
 func _emit_boss_projectile_ring(projectile_spawns: Array[Dictionary]) -> void:
 	var phase: int = clampi(int(floor(boss_time_alive / 18.0)), 0, 5)
 	var projectile_count: int = 18 + phase * 2
@@ -398,8 +479,12 @@ func _draw() -> void:
 	if kind == EnemyKind.BOSS and boss_window_active:
 		draw_color = Color(1.0, 0.74, 0.52)
 
-	var draw_swarm_body: bool = not (kind == EnemyKind.SWARM and swarm_sprite != null and swarm_sprite.visible)
-	if draw_swarm_body:
+	var draw_sprite_body: bool = true
+	if kind == EnemyKind.SWARM and swarm_sprite != null and swarm_sprite.visible:
+		draw_sprite_body = false
+	if kind == EnemyKind.RANGED and ranged_sprite != null and ranged_sprite.visible:
+		draw_sprite_body = false
+	if draw_sprite_body:
 		draw_circle(Vector2.ZERO, body_radius, draw_color)
 
 	if kind == EnemyKind.ELITE and elite_window_active:

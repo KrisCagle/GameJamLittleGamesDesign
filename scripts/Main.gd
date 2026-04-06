@@ -43,6 +43,7 @@ const HERO_CARD_TANK_SHEET := "res://assets/heroes/tank_idle.png"
 const HERO_CARD_RANGER_SHEET := "res://assets/heroes/ranger_idle.png"
 const HERO_CARD_ROGUE_SHEET := "res://assets/heroes/rogue_idle.png"
 const START_MENU_TITLE_FONT_PATH := "res://assets/fonts/Starstruck.ttf"
+const FLOOR_TEXTURE_PATH := "res://assets/floor/floor_tileset12.png"
 const FLOOR_TILE_SIZE := 104.0
 const FLOOR_PATTERN_PAD := 220.0
 const WALL_FRAME_THICKNESS := 34.0
@@ -54,6 +55,14 @@ const CAMERA_ZOOM_MENU := Vector2(1.0, 1.0)
 const CAMERA_ZOOM_GAME := Vector2(1.22, 1.22)
 const CAMERA_ZOOM_SMOOTH := 8.5
 const WEB_LOW_SPEC_ENABLED := true
+const WAVE_BASE_ENEMIES := 30
+const WAVE_LINEAR_ENEMIES := 7
+const WAVE_SCALING_ENEMIES := 2.2
+const WAVE_BOSS_SUPPORT_BASE := 18
+const WAVE_BOSS_SUPPORT_PER_WAVE := 4
+const WAVE_SPAWN_INTERVAL_START := 0.43
+const WAVE_SPAWN_INTERVAL_FLOOR := 0.16
+const WAVE_SPAWN_INTERVAL_DECAY := 0.014
 
 @onready var heroes_root: Node2D = $Heroes
 @onready var enemies_root: Node2D = $Enemies
@@ -116,6 +125,7 @@ var start_menu_title_font: Font = null
 var lighting_root: Node2D = null
 var light_texture_soft: Texture2D = null
 var light_texture_wide: Texture2D = null
+var floor_texture: Texture2D = null
 var top_glow_lights: Array[PointLight2D] = []
 var top_beam_lights: Array[PointLight2D] = []
 var hero_lights: Array[PointLight2D] = []
@@ -145,6 +155,7 @@ func _ready() -> void:
 	_spawn_heroes()
 	_load_start_card_textures()
 	start_menu_title_font = load(START_MENU_TITLE_FONT_PATH) as Font
+	floor_texture = load(FLOOR_TEXTURE_PATH) as Texture2D
 	low_spec_mode = WEB_LOW_SPEC_ENABLED and OS.has_feature("web")
 	_setup_lighting_nodes()
 	heroes_root.visible = false
@@ -267,17 +278,17 @@ func _spawn_heroes() -> void:
 	var c: Vector2 = arena_rect.get_center()
 
 	var knight: Hero = HeroScript.new()
-	knight.configure(HERO_KNIGHT, c + Vector2(0.0, -28.0))
+	knight.configure(HERO_KNIGHT, c + Vector2(0.0, -10.0))
 	heroes_root.add_child(knight)
 	heroes.append(knight)
 
 	var ranger: Hero = HeroScript.new()
-	ranger.configure(HERO_RANGER, c + Vector2(-84.0, 62.0))
+	ranger.configure(HERO_RANGER, c + Vector2(-58.0, 44.0))
 	heroes_root.add_child(ranger)
 	heroes.append(ranger)
 
 	var rogue: Hero = HeroScript.new()
-	rogue.configure(HERO_ROGUE, c + Vector2(84.0, 62.0))
+	rogue.configure(HERO_ROGUE, c + Vector2(58.0, 44.0))
 	heroes_root.add_child(rogue)
 	heroes.append(rogue)
 
@@ -604,10 +615,10 @@ func _start_wave() -> void:
 	wave += 1
 	boss_spawn_pending = wave >= 5 and (wave % 5 == 0)
 	if boss_spawn_pending:
-		spawn_remaining = 0
+		spawn_remaining = WAVE_BOSS_SUPPORT_BASE + wave * WAVE_BOSS_SUPPORT_PER_WAVE
 	else:
-		spawn_remaining = 16 + wave * 4 + int(floor(float(wave) * 1.4))
-	spawn_timer = 0.25
+		spawn_remaining = WAVE_BASE_ENEMIES + wave * WAVE_LINEAR_ENEMIES + int(floor(float(wave) * WAVE_SCALING_ENEMIES))
+	spawn_timer = 0.18
 	spawning = true
 	waiting_for_next_wave = false
 	upgrade_phase_active = false
@@ -619,7 +630,7 @@ func _update_spawning(delta: float) -> void:
 		return
 
 	spawn_timer -= delta
-	var interval: float = maxf(0.55 - float(wave) * 0.015, 0.22)
+	var interval: float = maxf(WAVE_SPAWN_INTERVAL_START - float(wave) * WAVE_SPAWN_INTERVAL_DECAY, WAVE_SPAWN_INTERVAL_FLOOR)
 	while spawn_timer <= 0.0 and (spawn_remaining > 0 or boss_spawn_pending):
 		if boss_spawn_pending:
 			_spawn_boss()
@@ -1347,8 +1358,6 @@ func _draw_world_backdrop(view_rect: Rect2) -> void:
 	if low_spec_mode:
 		draw_rect(arena_rect, Color(0.03, 0.05, 0.08, 0.26), true)
 	_draw_boundary_walls()
-	if not low_spec_mode:
-		_draw_central_floor_emblem()
 	_draw_atmospheric_lighting(view_rect)
 
 func _draw_start_menu_backdrop(view_rect: Rect2) -> void:
@@ -1508,6 +1517,27 @@ func _draw_floor_pattern(view_rect: Rect2) -> void:
 	if visible.size.x <= 0.0 or visible.size.y <= 0.0:
 		return
 
+	if floor_texture != null:
+		var tex_w: float = float(floor_texture.get_width())
+		var tex_h: float = float(floor_texture.get_height())
+		if tex_w > 0.0 and tex_h > 0.0:
+			var center_anchor: Vector2 = arena_rect.get_center() - Vector2(tex_w * 0.5, tex_h * 0.5)
+			var start_x_tex: float = center_anchor.x + floor((visible.position.x - center_anchor.x) / tex_w) * tex_w
+			var start_y_tex: float = center_anchor.y + floor((visible.position.y - center_anchor.y) / tex_h) * tex_h
+			var end_x_tex: float = visible.end.x + tex_w
+			var end_y_tex: float = visible.end.y + tex_h
+			var src_rect: Rect2 = Rect2(Vector2.ZERO, Vector2(tex_w, tex_h))
+			for y in range(int(start_y_tex), int(end_y_tex), int(tex_h)):
+				for x in range(int(start_x_tex), int(end_x_tex), int(tex_w)):
+					var draw_rect_tex: Rect2 = Rect2(Vector2(float(x), float(y)), Vector2(tex_w, tex_h))
+					# Keep the new tile readable but still leave room for lights/shadows on top.
+					draw_texture_rect_region(floor_texture, draw_rect_tex, src_rect, Color(0.72, 0.84, 0.98, 0.76), false, true)
+			draw_rect(arena_rect, Color(0.02, 0.04, 0.07, 0.17), true)
+			return
+
+	_draw_floor_pattern_fallback(visible)
+
+func _draw_floor_pattern_fallback(visible: Rect2) -> void:
 	var tile: float = FLOOR_TILE_SIZE
 	var half: float = tile * 0.5
 	var start_x: float = floor(visible.position.x / tile) * tile

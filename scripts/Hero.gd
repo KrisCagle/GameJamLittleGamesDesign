@@ -10,7 +10,7 @@ const ROGUE_SPRITE_PATH := "res://assets/heroes/rogue_idle.png"
 const HERO_SIZE_MULT := 1.4
 const HERO_UNIFORM_BASE_SCALE := Vector2(0.98, 0.98)
 const HERO_MOVE_SPEED_MULT := 1.04
-const HERO_DAMAGE_MULT := 1.32
+const HERO_DAMAGE_MULT := 1.42
 
 var kind: int = HeroKind.KNIGHT
 var hero_name: String = "Knight"
@@ -52,6 +52,8 @@ const ROGUE_ASSIST_THREAT_RADIUS := 225.0
 const ROGUE_GUARD_PADDING := 40.0
 const ROGUE_ANCHOR_TOLERANCE := 12.0
 const ROGUE_TOO_CLOSE_MULT := 0.8
+const ROGUE_GUARD_LOCK_DURATION := 0.65
+const ROGUE_GUARD_SWAP_HEALTH_MARGIN := 0.08
 const HERO_COHESION_DISTANCE := 195.0
 const HERO_REJOIN_DISTANCE := 275.0
 const HERO_DODGE_PADDING := 26.0
@@ -63,6 +65,10 @@ const HEALER_ANCHOR_SOFT_MIN := 120.0
 const HEALER_ANCHOR_HARD_MIN := 180.0
 const HEALER_ANCHOR_BLEND := 0.74
 const WALL_SLIDE_MARGIN := 18.0
+
+var rogue_guard_ally: Hero = null
+var rogue_guard_lock_timer: float = 0.0
+var rogue_velocity_smooth: Vector2 = Vector2.ZERO
 
 func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	kind = hero_kind
@@ -128,6 +134,7 @@ func process_tick(delta: float, enemies: Array[Enemy], heroes: Array[Hero], aren
 		return
 
 	attack_timer = maxf(0.0, attack_timer - delta)
+	rogue_guard_lock_timer = maxf(0.0, rogue_guard_lock_timer - delta)
 
 	var target: Enemy = _select_movement_target(enemies, heroes)
 	if is_player_controlled:
@@ -200,7 +207,7 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 					var tangent: Vector2 = Vector2(-to_target.y, to_target.x).normalized()
 					velocity = tangent * move_speed * 0.64
 		HeroKind.ROGUE:
-			var ally: Hero = _find_ally_needing_help(heroes, enemies)
+			var ally: Hero = _resolve_rogue_guard_ally(heroes, enemies)
 			if ally != null:
 				var desired_spacing: float = ally.body_radius + body_radius + ROGUE_GUARD_PADDING
 				var anchor: Vector2 = ally.global_position
@@ -235,6 +242,7 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 						var tangent: Vector2 = Vector2(-orbit_axis.y, orbit_axis.x).normalized()
 						velocity = tangent * move_speed * 0.82
 			elif target != null:
+				rogue_guard_ally = null
 				var chase_mult: float = 1.04 if not has_halo else 1.18 + rogue_halo_speed_bonus_mult
 				velocity = (target.global_position - global_position).normalized() * move_speed * chase_mult
 
@@ -264,6 +272,13 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 			HeroKind.ROGUE:
 				dodge_mult = 0.82
 		velocity += dodge * move_speed * dodge_mult
+
+	# Rogue guard AI can oscillate when ally-threat vectors change quickly.
+	# Smooth its final steering a bit so movement stays fast but less jittery.
+	if kind == HeroKind.ROGUE and not is_player_controlled:
+		var smooth_t: float = clampf(delta * 12.0, 0.0, 1.0)
+		rogue_velocity_smooth = rogue_velocity_smooth.lerp(velocity, smooth_t)
+		velocity = rogue_velocity_smooth
 
 	if velocity.length() > move_speed * 1.45:
 		velocity = velocity.normalized() * move_speed * 1.45
@@ -427,6 +442,38 @@ func _find_ally_needing_help(heroes: Array[Hero], enemies: Array[Enemy]) -> Hero
 	if nearest_threat_dist > ROGUE_ASSIST_THREAT_RADIUS:
 		return null
 	return result
+
+func _resolve_rogue_guard_ally(heroes: Array[Hero], enemies: Array[Enemy]) -> Hero:
+	if kind != HeroKind.ROGUE:
+		return null
+
+	if rogue_guard_ally != null and (not is_instance_valid(rogue_guard_ally) or rogue_guard_ally.health <= 0.0):
+		rogue_guard_ally = null
+		rogue_guard_lock_timer = 0.0
+
+	var candidate: Hero = _find_ally_needing_help(heroes, enemies)
+	if rogue_guard_ally == null:
+		if candidate != null:
+			rogue_guard_ally = candidate
+			rogue_guard_lock_timer = ROGUE_GUARD_LOCK_DURATION
+		return rogue_guard_ally
+
+	if candidate == null:
+		if rogue_guard_lock_timer <= 0.0:
+			rogue_guard_ally = null
+		return rogue_guard_ally
+
+	if candidate != rogue_guard_ally:
+		var current_ratio: float = rogue_guard_ally.health_ratio()
+		var candidate_ratio: float = candidate.health_ratio()
+		var should_swap: bool = candidate_ratio < (current_ratio - ROGUE_GUARD_SWAP_HEALTH_MARGIN)
+		if should_swap and rogue_guard_lock_timer <= 0.0:
+			rogue_guard_ally = candidate
+			rogue_guard_lock_timer = ROGUE_GUARD_LOCK_DURATION
+	else:
+		rogue_guard_lock_timer = ROGUE_GUARD_LOCK_DURATION
+
+	return rogue_guard_ally
 
 func _nearest_enemy_distance_to_point(enemies: Array[Enemy], point: Vector2) -> float:
 	var nearest_dist: float = INF
@@ -656,6 +703,8 @@ func set_player_controlled(active: bool) -> void:
 	if is_player_controlled == active:
 		return
 	is_player_controlled = active
+	if active and kind == HeroKind.ROGUE:
+		rogue_velocity_smooth = Vector2.ZERO
 	queue_redraw()
 
 func trigger_halo_switch_feedback() -> void:

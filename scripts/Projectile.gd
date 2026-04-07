@@ -2,6 +2,9 @@ extends Node2D
 class_name Projectile
 
 enum Team { HERO, ENEMY }
+const ENEMY_RANGED_PROJECTILE_SHEET_PATH := "res://assets/enemies/enemy_ranged_projectile_attack.png"
+const ENEMY_RANGED_PROJECTILE_ANIM := "attack"
+const ENEMY_RANGED_PROJECTILE_FRAME_COUNT := 5
 
 var team: int = Team.HERO
 var velocity: Vector2 = Vector2.ZERO
@@ -9,9 +12,11 @@ var damage: float = 1.0
 var radius: float = 5.0
 var ttl: float = 2.0
 var body_color: Color = Color(1.0, 1.0, 1.0)
+var style: String = ""
 
 var homing_target: Node2D = null
 var homing_turn_rate: float = 0.0
+var projectile_sprite: AnimatedSprite2D = null
 
 func configure_from_data(data: Dictionary) -> void:
 	var spawn_position: Vector2 = data.get("position", Vector2.ZERO)
@@ -24,6 +29,7 @@ func configure_from_data(data: Dictionary) -> void:
 
 	var team_name: String = str(data.get("team", "hero"))
 	team = Team.ENEMY if team_name == "enemy" else Team.HERO
+	style = str(data.get("style", ""))
 
 	homing_target = null
 	homing_turn_rate = float(data.get("homing_turn_rate", 0.0))
@@ -37,7 +43,9 @@ func configure_from_data(data: Dictionary) -> void:
 		direction = Vector2.RIGHT
 	velocity = direction.normalized() * speed
 	rotation = velocity.angle()
-	queue_redraw()
+	_setup_projectile_visual()
+	if projectile_sprite == null:
+		queue_redraw()
 
 func process_tick(delta: float, extended_arena: Rect2) -> bool:
 	if homing_target != null and is_instance_valid(homing_target) and homing_turn_rate > 0.0:
@@ -55,9 +63,47 @@ func process_tick(delta: float, extended_arena: Rect2) -> bool:
 		return false
 	if not extended_arena.has_point(global_position):
 		return false
-	queue_redraw()
+	if projectile_sprite == null:
+		queue_redraw()
 	return true
 
 func _draw() -> void:
+	if projectile_sprite != null:
+		return
 	draw_circle(Vector2.ZERO, radius, body_color)
 	draw_circle(Vector2.ZERO, radius + 2.0, Color(body_color.r, body_color.g, body_color.b, 0.22))
+
+func _setup_projectile_visual() -> void:
+	if style != "enemy_ranged" or team != Team.ENEMY:
+		return
+
+	var texture: Texture2D = load(ENEMY_RANGED_PROJECTILE_SHEET_PATH)
+	if texture == null:
+		return
+
+	var frame_w: int = int(floor(float(texture.get_width()) / float(ENEMY_RANGED_PROJECTILE_FRAME_COUNT)))
+	var frame_h: int = texture.get_height()
+	if frame_w <= 0 or frame_h <= 0:
+		return
+
+	var frames: SpriteFrames = SpriteFrames.new()
+	frames.add_animation(ENEMY_RANGED_PROJECTILE_ANIM)
+	frames.set_animation_loop(ENEMY_RANGED_PROJECTILE_ANIM, true)
+	frames.set_animation_speed(ENEMY_RANGED_PROJECTILE_ANIM, 10.5)
+	for i in range(ENEMY_RANGED_PROJECTILE_FRAME_COUNT):
+		var atlas: AtlasTexture = AtlasTexture.new()
+		atlas.atlas = texture
+		atlas.region = Rect2(i * frame_w, 0, frame_w, frame_h)
+		atlas.filter_clip = true
+		frames.add_frame(ENEMY_RANGED_PROJECTILE_ANIM, atlas)
+
+	projectile_sprite = AnimatedSprite2D.new()
+	projectile_sprite.name = "ProjectileSprite"
+	projectile_sprite.centered = true
+	projectile_sprite.z_index = 6
+	projectile_sprite.sprite_frames = frames
+	projectile_sprite.animation = ENEMY_RANGED_PROJECTILE_ANIM
+	projectile_sprite.scale = Vector2(1.95, 1.95)
+	projectile_sprite.modulate = Color(1.0, 0.96, 0.94, 1.0)
+	add_child(projectile_sprite)
+	projectile_sprite.play(ENEMY_RANGED_PROJECTILE_ANIM)

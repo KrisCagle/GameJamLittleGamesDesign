@@ -26,6 +26,9 @@ const UPGRADE_TANK_MARCH := 7
 const UPGRADE_ROGUE_PRECISION := 8
 const UPGRADE_TEAM_TRAINING := 9
 const UPGRADE_GOLDEN_SURGE := 10
+const UPGRADE_ROGUE_TWIN_FANGS := 11
+const UPGRADE_TANK_HEAVY_ATTACK := 12
+const UPGRADE_RANGER_TRIPLE_ARROWS := 13
 
 const WORLD_SIZE := Vector2(3200, 2200)
 const ARENA_MARGIN := 44.0
@@ -43,13 +46,34 @@ const HERO_CARD_TANK_SHEET := "res://assets/heroes/tank_idle.png"
 const HERO_CARD_RANGER_SHEET := "res://assets/heroes/ranger_idle.png"
 const HERO_CARD_ROGUE_SHEET := "res://assets/heroes/rogue_idle.png"
 const START_MENU_TITLE_FONT_PATH := "res://assets/fonts/Starstruck.ttf"
-const FLOOR_TILE_SIZE := 84.0
+const FLOOR_TEXTURE_PATH := "res://assets/floor/floor_tileset12.png"
+const FLOOR_TEXTURE_CENTER_COVERAGE := 0.9
+const FLOOR_TILE_SIZE := 104.0
 const FLOOR_PATTERN_PAD := 220.0
 const WALL_FRAME_THICKNESS := 34.0
-const VIGNETTE_RINGS := 6
+const VIGNETTE_RINGS := 4
 const HERO_CONTRAST_BASE_RADIUS := 34.0
-const ATMOS_RAY_COUNT := 6
+const ATMOS_RAY_COUNT := 4
 const ATMOS_RAY_EDGE_INSET := 140.0
+const CAMERA_ZOOM_MENU := Vector2(1.0, 1.0)
+const CAMERA_ZOOM_GAME := Vector2(1.22, 1.22)
+const CAMERA_ZOOM_SMOOTH := 8.5
+const WEB_LOW_SPEC_ENABLED := true
+const WAVE_BASE_ENEMIES := 30
+const WAVE_LINEAR_ENEMIES := 7
+const WAVE_SCALING_ENEMIES := 2.2
+const WAVE_BOSS_SUPPORT_BASE := 18
+const WAVE_BOSS_SUPPORT_PER_WAVE := 4
+const WAVE_SPAWN_INTERVAL_START := 0.43
+const WAVE_SPAWN_INTERVAL_FLOOR := 0.16
+const WAVE_SPAWN_INTERVAL_DECAY := 0.014
+const CAMERA_SHAKE_DURATION := 0.16
+const CAMERA_SHAKE_DECAY := 26.0
+const CAMERA_SHAKE_MAX := 8.0
+const ENABLE_SFX := false
+const SFX_MIX_RATE := 32000.0
+const SFX_BUFFER_LENGTH := 0.16
+const SFX_MIN_INTERVAL := 0.035
 
 @onready var heroes_root: Node2D = $Heroes
 @onready var enemies_root: Node2D = $Enemies
@@ -112,6 +136,7 @@ var start_menu_title_font: Font = null
 var lighting_root: Node2D = null
 var light_texture_soft: Texture2D = null
 var light_texture_wide: Texture2D = null
+var floor_texture: Texture2D = null
 var top_glow_lights: Array[PointLight2D] = []
 var top_beam_lights: Array[PointLight2D] = []
 var hero_lights: Array[PointLight2D] = []
@@ -122,6 +147,13 @@ var center_ceiling_glow: PointLight2D = null
 var center_ceiling_beam: PointLight2D = null
 var center_ceiling_core: PointLight2D = null
 var center_ceiling_haze: PointLight2D = null
+var low_spec_mode: bool = false
+var camera_shake_timer: float = 0.0
+var camera_shake_strength: float = 0.0
+var camera_shake_offset: Vector2 = Vector2.ZERO
+var sfx_player: AudioStreamPlayer = null
+var sfx_playback: AudioStreamGeneratorPlayback = null
+var sfx_cooldown_timer: float = 0.0
 
 func _ready() -> void:
 	randomize()
@@ -136,10 +168,16 @@ func _ready() -> void:
 	upgrade_levels[UPGRADE_ROGUE_PRECISION] = 0
 	upgrade_levels[UPGRADE_TEAM_TRAINING] = 0
 	upgrade_levels[UPGRADE_GOLDEN_SURGE] = 0
+	upgrade_levels[UPGRADE_ROGUE_TWIN_FANGS] = 0
+	upgrade_levels[UPGRADE_TANK_HEAVY_ATTACK] = 0
+	upgrade_levels[UPGRADE_RANGER_TRIPLE_ARROWS] = 0
 
 	_spawn_heroes()
 	_load_start_card_textures()
 	start_menu_title_font = load(START_MENU_TITLE_FONT_PATH) as Font
+	floor_texture = load(FLOOR_TEXTURE_PATH) as Texture2D
+	_setup_audio_sfx()
+	low_spec_mode = WEB_LOW_SPEC_ENABLED and OS.has_feature("web")
 	_setup_lighting_nodes()
 	heroes_root.visible = false
 	halo_index = -1
@@ -150,6 +188,7 @@ func _ready() -> void:
 	halo_switch_feedback_timer = 0.0
 	_sync_halo_state()
 	world_camera.position = arena_rect.get_center()
+	world_camera.zoom = CAMERA_ZOOM_MENU
 	world_camera.limit_left = int(arena_rect.position.x)
 	world_camera.limit_top = int(arena_rect.position.y)
 	world_camera.limit_right = int(arena_rect.end.x)
@@ -158,6 +197,8 @@ func _ready() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	sfx_cooldown_timer = maxf(0.0, sfx_cooldown_timer - delta)
+
 	if start_selection_active:
 		_update_dynamic_lighting(delta)
 		_update_camera(delta)
@@ -260,19 +301,36 @@ func _spawn_heroes() -> void:
 	var c: Vector2 = arena_rect.get_center()
 
 	var knight: Hero = HeroScript.new()
-	knight.configure(HERO_KNIGHT, c + Vector2(0.0, -28.0))
+	knight.configure(HERO_KNIGHT, c + Vector2(0.0, -10.0))
 	heroes_root.add_child(knight)
 	heroes.append(knight)
+	_connect_hero_signals(knight)
 
 	var ranger: Hero = HeroScript.new()
-	ranger.configure(HERO_RANGER, c + Vector2(-84.0, 62.0))
+	ranger.configure(HERO_RANGER, c + Vector2(-58.0, 44.0))
 	heroes_root.add_child(ranger)
 	heroes.append(ranger)
+	_connect_hero_signals(ranger)
 
 	var rogue: Hero = HeroScript.new()
-	rogue.configure(HERO_ROGUE, c + Vector2(84.0, 62.0))
+	rogue.configure(HERO_ROGUE, c + Vector2(58.0, 44.0))
 	heroes_root.add_child(rogue)
 	heroes.append(rogue)
+	_connect_hero_signals(rogue)
+
+func _connect_hero_signals(hero: Hero) -> void:
+	if hero == null:
+		return
+	var cb: Callable = Callable(self, "_on_hero_impact")
+	if not hero.impact.is_connected(cb):
+		hero.impact.connect(cb)
+
+func _connect_enemy_signals(enemy: Enemy) -> void:
+	if enemy == null:
+		return
+	var cb: Callable = Callable(self, "_on_enemy_impact")
+	if not enemy.impact.is_connected(cb):
+		enemy.impact.connect(cb)
 
 func _set_halo(index: int, allow_reactivate: bool = true) -> void:
 	if index < 0 or index >= heroes.size():
@@ -340,10 +398,6 @@ func _setup_lighting_nodes() -> void:
 	if lighting_root != null and is_instance_valid(lighting_root):
 		lighting_root.queue_free()
 
-	lighting_root = Node2D.new()
-	lighting_root.name = "Lighting"
-	add_child(lighting_root)
-
 	top_glow_lights.clear()
 	top_beam_lights.clear()
 	hero_lights.clear()
@@ -354,8 +408,19 @@ func _setup_lighting_nodes() -> void:
 	center_ceiling_beam = null
 	center_ceiling_core = null
 	center_ceiling_haze = null
-	light_texture_soft = _create_soft_light_texture(256, 2.05)
-	light_texture_wide = _create_soft_light_texture(256, 1.35)
+
+	if low_spec_mode:
+		lighting_root = null
+		light_texture_soft = null
+		light_texture_wide = null
+		return
+
+	lighting_root = Node2D.new()
+	lighting_root.name = "Lighting"
+	add_child(lighting_root)
+
+	light_texture_soft = _create_soft_light_texture(192, 2.05)
+	light_texture_wide = _create_soft_light_texture(192, 1.35)
 
 	for i in range(ATMOS_RAY_COUNT):
 		var anchor: Vector2 = _top_light_anchor_position(i)
@@ -397,23 +462,6 @@ func _setup_lighting_nodes() -> void:
 	center_ceiling_beam.energy = 0.68
 	center_ceiling_beam.texture_scale = 2.48
 	lighting_root.add_child(center_ceiling_beam)
-
-	center_ceiling_core = PointLight2D.new()
-	center_ceiling_core.texture = light_texture_wide
-	center_ceiling_core.position = center_anchor + Vector2(0.0, 370.0)
-	center_ceiling_core.scale = Vector2(0.46, 5.25)
-	center_ceiling_core.color = Color(0.82, 0.92, 1.0, 1.0)
-	center_ceiling_core.energy = 0.82
-	center_ceiling_core.texture_scale = 1.9
-	lighting_root.add_child(center_ceiling_core)
-
-	center_ceiling_haze = PointLight2D.new()
-	center_ceiling_haze.texture = light_texture_soft
-	center_ceiling_haze.position = center_anchor + Vector2(0.0, 292.0)
-	center_ceiling_haze.color = Color(0.7, 0.84, 1.0, 1.0)
-	center_ceiling_haze.energy = 0.42
-	center_ceiling_haze.texture_scale = 2.45
-	lighting_root.add_child(center_ceiling_haze)
 
 	for i in range(3):
 		var menu_color: Color = Color(0.34, 0.72, 1.0, 1.0)
@@ -607,14 +655,15 @@ func _start_wave() -> void:
 	wave += 1
 	boss_spawn_pending = wave >= 5 and (wave % 5 == 0)
 	if boss_spawn_pending:
-		spawn_remaining = 0
+		spawn_remaining = WAVE_BOSS_SUPPORT_BASE + wave * WAVE_BOSS_SUPPORT_PER_WAVE
 	else:
-		spawn_remaining = 16 + wave * 4 + int(floor(float(wave) * 1.4))
-	spawn_timer = 0.25
+		spawn_remaining = WAVE_BASE_ENEMIES + wave * WAVE_LINEAR_ENEMIES + int(floor(float(wave) * WAVE_SCALING_ENEMIES))
+	spawn_timer = 0.18
 	spawning = true
 	waiting_for_next_wave = false
 	upgrade_phase_active = false
 	intermission_timer = 0.0
+	_set_world_visible_for_upgrade(true)
 	_sync_halo_state()
 
 func _update_spawning(delta: float) -> void:
@@ -622,7 +671,7 @@ func _update_spawning(delta: float) -> void:
 		return
 
 	spawn_timer -= delta
-	var interval: float = maxf(0.55 - float(wave) * 0.015, 0.22)
+	var interval: float = maxf(WAVE_SPAWN_INTERVAL_START - float(wave) * WAVE_SPAWN_INTERVAL_DECAY, WAVE_SPAWN_INTERVAL_FLOOR)
 	while spawn_timer <= 0.0 and (spawn_remaining > 0 or boss_spawn_pending):
 		if boss_spawn_pending:
 			_spawn_boss()
@@ -677,6 +726,8 @@ func _on_halo_switched(previous_index: int, new_index: int) -> void:
 	halo_switch_feedback_to = heroes[new_index].global_position
 	halo_switch_feedback_timer = HALO_SWITCH_FEEDBACK_DURATION
 	heroes[new_index].trigger_halo_switch_feedback()
+	_add_camera_shake(0.42)
+	_play_switch_sfx()
 
 func _sync_halo_state() -> void:
 	var can_project: bool = _can_project_halo()
@@ -746,6 +797,7 @@ func _spawn_enemy() -> void:
 	var kind: int = _pick_enemy_kind()
 	var target: Hero = _pick_spawn_target(kind)
 	enemy.configure(kind, _random_spawn_point(), target, wave)
+	_connect_enemy_signals(enemy)
 	enemies_root.add_child(enemy)
 	enemies.append(enemy)
 
@@ -753,6 +805,7 @@ func _spawn_boss() -> void:
 	var enemy: Enemy = EnemyScript.new()
 	var target: Hero = _pick_spawn_target(ENEMY_BOSS)
 	enemy.configure(ENEMY_BOSS, _boss_spawn_point(), target, wave)
+	_connect_enemy_signals(enemy)
 	enemies_root.add_child(enemy)
 	enemies.append(enemy)
 
@@ -769,6 +822,7 @@ func _spawn_summoned_enemies_from_queue() -> void:
 		var target: Hero = _pick_spawn_target(kind)
 		var enemy: Enemy = EnemyScript.new()
 		enemy.configure(kind, spawn_pos, target, wave)
+		_connect_enemy_signals(enemy)
 		enemies_root.add_child(enemy)
 		enemies.append(enemy)
 
@@ -887,6 +941,7 @@ func _update_projectiles(delta: float) -> void:
 						continue
 					var impact_dist: float = projectile_radius + enemy.body_radius
 					if projectile_pos.distance_squared_to(enemy.global_position) <= impact_dist * impact_dist:
+						enemy.set_damage_source(projectile_pos)
 						enemy.take_damage(projectile_damage)
 						hit = true
 						break
@@ -896,6 +951,7 @@ func _update_projectiles(delta: float) -> void:
 						continue
 					var impact_dist: float = projectile_radius + hero.body_radius
 					if projectile_pos.distance_squared_to(hero.global_position) <= impact_dist * impact_dist:
+						hero.set_damage_source(projectile_pos)
 						hero.apply_damage(projectile_damage)
 						hit = true
 						break
@@ -949,26 +1005,77 @@ func _begin_upgrade_phase() -> void:
 	if upgrade_choices.is_empty():
 		upgrade_phase_active = false
 		intermission_timer = 1.0
+		_set_world_visible_for_upgrade(true)
 		return
 
 	upgrade_phase_active = true
 	intermission_timer = 999.0
+	_set_world_visible_for_upgrade(false)
 	_sync_halo_state()
 
+func _set_world_visible_for_upgrade(visible: bool) -> void:
+	heroes_root.visible = visible and not start_selection_active
+	enemies_root.visible = visible
+	projectiles_root.visible = visible
+
+func _has_alive_hero_kind(kind: int) -> bool:
+	for hero: Hero in heroes:
+		if hero.health > 0.0 and hero.kind == kind:
+			return true
+	return false
+
+func _collect_attack_unlock_priority(tank_alive: bool, ranger_alive: bool, rogue_alive: bool) -> Array[int]:
+	var priority: Array[int] = []
+	if tank_alive and int(upgrade_levels.get(UPGRADE_TANK_HEAVY_ATTACK, 0)) <= 0:
+		priority.append(UPGRADE_TANK_HEAVY_ATTACK)
+	if ranger_alive and int(upgrade_levels.get(UPGRADE_RANGER_TRIPLE_ARROWS, 0)) <= 0:
+		priority.append(UPGRADE_RANGER_TRIPLE_ARROWS)
+	if rogue_alive and int(upgrade_levels.get(UPGRADE_ROGUE_TWIN_FANGS, 0)) <= 0:
+		priority.append(UPGRADE_ROGUE_TWIN_FANGS)
+	return priority
+
 func _roll_upgrade_choices() -> Array[int]:
+	var tank_alive: bool = _has_alive_hero_kind(HERO_KNIGHT)
+	var ranger_alive: bool = _has_alive_hero_kind(HERO_RANGER)
+	var rogue_alive: bool = _has_alive_hero_kind(HERO_ROGUE)
+
 	var pool: Array[int] = []
+	# Core halo/pacing cards are always relevant.
 	pool.append(UPGRADE_HALO_FLOW)
-	pool.append(UPGRADE_RANGER_REMEDY)
-	pool.append(UPGRADE_ROGUE_OVERDRIVE)
-	pool.append(UPGRADE_TANK_BASTION)
 	pool.append(UPGRADE_FIELD_PATCH)
 	pool.append(UPGRADE_HALO_RESERVOIR)
-	pool.append(UPGRADE_RANGER_FOCUS)
-	pool.append(UPGRADE_TANK_MARCH)
-	pool.append(UPGRADE_ROGUE_PRECISION)
 	pool.append(UPGRADE_TEAM_TRAINING)
 
+	if tank_alive:
+		pool.append(UPGRADE_TANK_BASTION)
+		pool.append(UPGRADE_TANK_MARCH)
+		if int(upgrade_levels.get(UPGRADE_TANK_HEAVY_ATTACK, 0)) <= 0:
+			pool.append(UPGRADE_TANK_HEAVY_ATTACK)
+
+	if ranger_alive:
+		pool.append(UPGRADE_RANGER_REMEDY)
+		pool.append(UPGRADE_RANGER_FOCUS)
+		if int(upgrade_levels.get(UPGRADE_RANGER_TRIPLE_ARROWS, 0)) <= 0:
+			pool.append(UPGRADE_RANGER_TRIPLE_ARROWS)
+
+	if rogue_alive:
+		pool.append(UPGRADE_ROGUE_OVERDRIVE)
+		pool.append(UPGRADE_ROGUE_PRECISION)
+		if int(upgrade_levels.get(UPGRADE_ROGUE_TWIN_FANGS, 0)) <= 0:
+			pool.append(UPGRADE_ROGUE_TWIN_FANGS)
+
+	if pool.is_empty():
+		return []
+
 	var result: Array[int] = []
+	var priority_unlocks: Array[int] = _collect_attack_unlock_priority(tank_alive, ranger_alive, rogue_alive)
+	for upgrade_id in priority_unlocks:
+		if result.size() >= 3:
+			break
+		if pool.has(upgrade_id):
+			result.append(upgrade_id)
+			pool.erase(upgrade_id)
+
 	var preferred: Array[int] = []
 	for upgrade_id in pool:
 		if not last_upgrade_choices.has(upgrade_id):
@@ -1038,10 +1145,13 @@ func _upgrade_slot_rect(slot: int) -> Rect2:
 	var gap: float = 16.0
 	var total_width: float = width * 3.0 + gap * 2.0
 	var start_x: float = (view_size.x - total_width) * 0.5
-	var y: float = view_size.y * 0.57
+	var y: float = (view_size.y - height) * 0.5
 	return Rect2(Vector2(start_x + float(slot) * (width + gap), y), Vector2(width, height))
 
 func _camera_target_position() -> Vector2:
+	if start_selection_active:
+		return arena_rect.get_center()
+
 	if halo_index >= 0 and halo_index < heroes.size() and heroes[halo_index].health > 0.0:
 		return heroes[halo_index].global_position
 
@@ -1061,6 +1171,96 @@ func _update_camera(delta: float) -> void:
 	var target: Vector2 = _camera_target_position()
 	var follow_t: float = clampf(CAMERA_FOLLOW_SMOOTH * delta, 0.0, 1.0)
 	world_camera.position = world_camera.position.lerp(target, follow_t)
+	var target_zoom: Vector2 = CAMERA_ZOOM_MENU if start_selection_active else CAMERA_ZOOM_GAME
+	var zoom_t: float = clampf(CAMERA_ZOOM_SMOOTH * delta, 0.0, 1.0)
+	world_camera.zoom = world_camera.zoom.lerp(target_zoom, zoom_t)
+	_update_camera_shake(delta)
+
+func _update_camera_shake(delta: float) -> void:
+	if camera_shake_timer > 0.0:
+		camera_shake_timer = maxf(0.0, camera_shake_timer - delta)
+		var t: float = camera_shake_timer / CAMERA_SHAKE_DURATION
+		var random_offset: Vector2 = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0))
+		var target_offset: Vector2 = random_offset * camera_shake_strength * clampf(t, 0.0, 1.0)
+		camera_shake_offset = camera_shake_offset.lerp(target_offset, clampf(delta * 28.0, 0.0, 1.0))
+		camera_shake_strength = maxf(0.0, camera_shake_strength - CAMERA_SHAKE_DECAY * delta)
+	else:
+		camera_shake_offset = camera_shake_offset.lerp(Vector2.ZERO, clampf(delta * 18.0, 0.0, 1.0))
+	world_camera.offset = camera_shake_offset
+
+func _add_camera_shake(amount: float) -> void:
+	camera_shake_strength = minf(CAMERA_SHAKE_MAX, camera_shake_strength + amount)
+	camera_shake_timer = maxf(camera_shake_timer, CAMERA_SHAKE_DURATION)
+
+func _setup_audio_sfx() -> void:
+	if not ENABLE_SFX:
+		return
+	sfx_player = AudioStreamPlayer.new()
+	sfx_player.name = "SFXPlayer"
+	add_child(sfx_player)
+	var generator: AudioStreamGenerator = AudioStreamGenerator.new()
+	generator.mix_rate = SFX_MIX_RATE
+	generator.buffer_length = SFX_BUFFER_LENGTH
+	sfx_player.stream = generator
+	sfx_player.volume_db = -12.0
+	sfx_player.play()
+	sfx_playback = sfx_player.get_stream_playback() as AudioStreamGeneratorPlayback
+
+func _play_hit_sfx(enemy_hit: bool, intensity: float) -> void:
+	if not ENABLE_SFX:
+		return
+	if sfx_playback == null:
+		return
+	if sfx_cooldown_timer > 0.0:
+		return
+	sfx_cooldown_timer = SFX_MIN_INTERVAL
+	var freq: float = 252.0 if enemy_hit else 176.0
+	freq *= 1.0 + randf_range(-0.08, 0.08)
+	var dur: float = 0.046 + clampf(intensity, 0.0, 1.0) * 0.028
+	var amp: float = (0.26 if enemy_hit else 0.22) * (0.55 + clampf(intensity, 0.0, 1.0) * 0.45)
+	_push_sfx_tone(freq, dur, amp)
+
+func _play_switch_sfx() -> void:
+	if not ENABLE_SFX:
+		return
+	if sfx_playback == null:
+		return
+	_push_sfx_tone(420.0, 0.055, 0.17)
+
+func _push_sfx_tone(freq: float, duration: float, amp: float) -> void:
+	if not ENABLE_SFX:
+		return
+	if sfx_playback == null and sfx_player != null:
+		sfx_playback = sfx_player.get_stream_playback() as AudioStreamGeneratorPlayback
+	if sfx_playback == null:
+		return
+	var frame_count: int = int(maxf(1.0, SFX_MIX_RATE * duration))
+	if not sfx_playback.can_push_buffer(frame_count):
+		return
+	var phase: float = 0.0
+	var phase_h: float = 0.0
+	var phase_inc: float = TAU * freq / SFX_MIX_RATE
+	var phase_inc_h: float = TAU * freq * 2.0 / SFX_MIX_RATE
+	for i in range(frame_count):
+		var t: float = float(i) / float(frame_count)
+		var env: float = (1.0 - t)
+		env *= env
+		var sample: float = sin(phase) * amp * env + sin(phase_h) * amp * 0.22 * env
+		sfx_playback.push_frame(Vector2(sample, sample))
+		phase += phase_inc
+		phase_h += phase_inc_h
+
+func _on_enemy_impact(_position: Vector2, intensity: float) -> void:
+	if start_selection_active:
+		return
+	_add_camera_shake(0.55 + intensity * 0.75)
+	_play_hit_sfx(true, intensity)
+
+func _on_hero_impact(_position: Vector2, intensity: float) -> void:
+	if start_selection_active:
+		return
+	_add_camera_shake(0.75 + intensity * 0.95)
+	_play_hit_sfx(false, intensity)
 
 func _view_origin() -> Vector2:
 	return _screen_to_world(Vector2.ZERO)
@@ -1120,6 +1320,7 @@ func _choose_upgrade(slot: int) -> void:
 	upgrade_phase_active = false
 	upgrade_choices.clear()
 	intermission_timer = 1.4
+	_set_world_visible_for_upgrade(true)
 	_sync_halo_state()
 
 func _apply_upgrade(upgrade_id: int) -> void:
@@ -1179,6 +1380,21 @@ func _apply_upgrade(upgrade_id: int) -> void:
 				hero.heal(32.0)
 				hero.move_speed += 3.0
 				hero.attack_damage += 1.25
+		UPGRADE_ROGUE_TWIN_FANGS:
+			for hero: Hero in heroes:
+				if hero.kind == HERO_ROGUE:
+					hero.rogue_dual_strike_unlocked = true
+					hero.attack_cooldown = maxf(0.18, hero.attack_cooldown * 0.95)
+		UPGRADE_TANK_HEAVY_ATTACK:
+			for hero: Hero in heroes:
+				if hero.kind == HERO_KNIGHT:
+					hero.tank_heavy_attack_unlocked = true
+					hero.attack_damage += 1.4
+		UPGRADE_RANGER_TRIPLE_ARROWS:
+			for hero: Hero in heroes:
+				if hero.kind == HERO_RANGER:
+					hero.ranger_triple_arrows_unlocked = true
+					hero.attack_cooldown = maxf(0.54, hero.attack_cooldown * 0.96)
 
 	upgrade_levels[upgrade_id] = int(upgrade_levels.get(upgrade_id, 0)) + 1
 	upgrades_taken += 1
@@ -1207,6 +1423,12 @@ func _upgrade_name(upgrade_id: int) -> String:
 			return "Team Training"
 		UPGRADE_GOLDEN_SURGE:
 			return "Golden Surge"
+		UPGRADE_ROGUE_TWIN_FANGS:
+			return "Twin Fangs"
+		UPGRADE_TANK_HEAVY_ATTACK:
+			return "Heavy Attack"
+		UPGRADE_RANGER_TRIPLE_ARROWS:
+			return "Triple Arrows"
 	return "Unknown"
 
 func _upgrade_description(upgrade_id: int) -> String:
@@ -1233,9 +1455,20 @@ func _upgrade_description(upgrade_id: int) -> String:
 			return "All heroes gain a small speed and damage bump."
 		UPGRADE_GOLDEN_SURGE:
 			return "Boss reward: major all-around power spike this run."
+		UPGRADE_ROGUE_TWIN_FANGS:
+			return "Unlock Rogue dual strike: attacks in front and behind each swing."
+		UPGRADE_TANK_HEAVY_ATTACK:
+			return "Unlock Tank charged slam: huge area strike that punishes swarms."
+		UPGRADE_RANGER_TRIPLE_ARROWS:
+			return "Unlock Ranger triple-shot: fires 3 arrows at once."
 	return ""
 
 func _update_ui() -> void:
+	var view_size: Vector2 = _viewport_size()
+	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	hint_label.size = Vector2(maxf(320.0, view_size.x - 20.0), hint_label.size.y)
+	hint_label.position = Vector2(10.0, view_size.y - 36.0)
+
 	if start_selection_active:
 		wave_label.text = ""
 		threat_label.text = ""
@@ -1336,8 +1569,9 @@ func _draw_world_backdrop(view_rect: Rect2) -> void:
 	draw_rect(arena_rect.grow(2600.0), Color(0.02, 0.03, 0.06), true)
 	draw_rect(arena_rect, Color(0.05, 0.08, 0.13), true)
 	_draw_floor_pattern(view_rect)
+	if low_spec_mode:
+		draw_rect(arena_rect, Color(0.03, 0.05, 0.08, 0.26), true)
 	_draw_boundary_walls()
-	_draw_central_floor_emblem()
 	_draw_atmospheric_lighting(view_rect)
 
 func _draw_start_menu_backdrop(view_rect: Rect2) -> void:
@@ -1410,6 +1644,9 @@ func _draw_start_menu_backdrop(view_rect: Rect2) -> void:
 	draw_rect(view_rect.grow(-44.0), Color(0.56, 0.74, 1.0, 0.07), false, 1.6)
 
 func _draw_readability_pass() -> void:
+	if low_spec_mode:
+		return
+
 	# Slightly dim the busy floor so character silhouettes stand out more.
 	draw_rect(arena_rect, Color(0.0, 0.0, 0.0, 0.12), true)
 
@@ -1465,13 +1702,13 @@ func _draw_soft_shadow(center: Vector2, direction: Vector2, length: float, width
 	var dir: Vector2 = direction.normalized()
 	if dir.length_squared() <= 0.0001:
 		dir = Vector2(0.0, 1.0)
-	for i in range(4):
-		var t: float = float(i) / 3.0
+	for i in range(3):
+		var t: float = float(i) / 2.0
 		var layer_center: Vector2 = center + dir * (length * 0.08 * t)
 		var layer_len: float = length * (1.0 - t * 0.28)
 		var layer_wid: float = width * (1.0 - t * 0.44)
 		var layer_alpha: float = alpha * (1.0 - t * 0.62)
-		_draw_oriented_soft_ellipse(layer_center, dir, layer_len, layer_wid, Color(tint.r, tint.g, tint.b, layer_alpha), 28)
+		_draw_oriented_soft_ellipse(layer_center, dir, layer_len, layer_wid, Color(tint.r, tint.g, tint.b, layer_alpha), 20)
 
 func _top_light_anchor_position(index: int) -> Vector2:
 	var t: float = (float(index) + 0.5) / float(max(1, ATMOS_RAY_COUNT))
@@ -1494,6 +1731,31 @@ func _draw_floor_pattern(view_rect: Rect2) -> void:
 	if visible.size.x <= 0.0 or visible.size.y <= 0.0:
 		return
 
+	if floor_texture != null:
+		var tex_w: float = float(floor_texture.get_width())
+		var tex_h: float = float(floor_texture.get_height())
+		if tex_w > 0.0 and tex_h > 0.0:
+			# Draw this floor art once, centered, so the medallion appears only in the middle.
+			draw_rect(arena_rect, Color(0.06, 0.1, 0.14, 0.95), true)
+			var max_h: float = arena_rect.size.y * FLOOR_TEXTURE_CENTER_COVERAGE
+			var draw_h: float = max_h
+			var draw_w: float = draw_h * (tex_w / maxf(tex_h, 0.001))
+			var max_w: float = arena_rect.size.x * 0.94
+			if draw_w > max_w:
+				draw_w = max_w
+				draw_h = draw_w * (tex_h / maxf(tex_w, 0.001))
+			var draw_rect_tex: Rect2 = Rect2(
+				arena_rect.get_center() - Vector2(draw_w * 0.5, draw_h * 0.5),
+				Vector2(draw_w, draw_h)
+			)
+			var src_rect: Rect2 = Rect2(Vector2.ZERO, Vector2(tex_w, tex_h))
+			draw_texture_rect_region(floor_texture, draw_rect_tex, src_rect, Color(0.76, 0.86, 1.0, 0.88), false, true)
+			draw_rect(arena_rect, Color(0.02, 0.04, 0.07, 0.14), true)
+			return
+
+	_draw_floor_pattern_fallback(visible)
+
+func _draw_floor_pattern_fallback(visible: Rect2) -> void:
 	var tile: float = FLOOR_TILE_SIZE
 	var half: float = tile * 0.5
 	var start_x: float = floor(visible.position.x / tile) * tile
@@ -1522,7 +1784,8 @@ func _draw_floor_pattern(view_rect: Rect2) -> void:
 
 			var outline := PackedVector2Array([diamond[0], diamond[1], diamond[2], diamond[3], diamond[0]])
 			var line_alpha: float = 0.12 if parity == 0 else 0.07
-			draw_polyline(outline, Color(0.77, 0.67, 0.42, line_alpha), 1.1)
+			if ((int(floor(float(x) / tile)) + int(floor(float(y) / tile))) % 3) == 0:
+				draw_polyline(outline, Color(0.77, 0.67, 0.42, line_alpha), 1.1)
 
 func _draw_boundary_walls() -> void:
 	var top_y: float = arena_rect.position.y
@@ -1732,7 +1995,15 @@ func _draw() -> void:
 	draw_rect(bar_rect, Color(0.95, 0.98, 1.0, 0.7), false, 1.5)
 
 	if upgrade_phase_active:
-		draw_rect(view_rect, Color(0.02, 0.04, 0.08, 0.34), true)
+		# Stronger modal separation so gameplay action doesn't reduce card readability.
+		draw_rect(view_rect, Color(0.01, 0.02, 0.04, 0.56), true)
+		var first_slot_screen: Rect2 = _upgrade_slot_rect(0)
+		var last_slot_screen: Rect2 = _upgrade_slot_rect(maxi(0, upgrade_choices.size() - 1))
+		var modal_panel_screen: Rect2 = first_slot_screen.merge(last_slot_screen).grow_individual(34.0, 42.0, 34.0, 58.0)
+		var modal_panel: Rect2 = _screen_rect_to_world(modal_panel_screen)
+		draw_rect(modal_panel, Color(0.04, 0.08, 0.14, 0.66), true)
+		draw_rect(modal_panel.grow(-6.0), Color(0.02, 0.04, 0.08, 0.36), true)
+		draw_rect(modal_panel, Color(0.86, 0.93, 1.0, 0.28), false, 2.0)
 		var hover_screen: Vector2 = get_viewport().get_mouse_position()
 		var card_font: Font = hero_status.get_theme_font("font")
 		if card_font == null:
@@ -1744,10 +2015,10 @@ func _draw() -> void:
 			var rect_screen: Rect2 = _upgrade_slot_rect(i)
 			var is_hover: bool = rect_screen.has_point(hover_screen)
 			var rect: Rect2 = _screen_rect_to_world(rect_screen)
-			var base_color: Color = Color(0.12, 0.18, 0.26, 0.85)
+			var base_color: Color = Color(0.12, 0.18, 0.26, 0.94)
 			var text_color: Color = Color(0.9, 0.95, 1.0, 0.95)
 			if is_hover:
-				base_color = Color(0.2, 0.28, 0.38, 0.92)
+				base_color = Color(0.2, 0.28, 0.38, 0.98)
 				text_color = Color(1.0, 1.0, 1.0, 1.0)
 			draw_rect(rect, base_color, true)
 			draw_rect(rect, Color(0.9, 0.95, 1.0, 0.72), false, 2.0)

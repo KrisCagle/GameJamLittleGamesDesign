@@ -1,5 +1,6 @@
 extends Node2D
 class_name Hero
+signal impact(position: Vector2, intensity: float)
 
 enum HeroKind { KNIGHT, RANGER, ROGUE }
 const HERO_ANIM_NAME := "idle"
@@ -7,6 +8,10 @@ const HERO_SHEET_FRAME_COUNT := 8
 const KNIGHT_SPRITE_PATH := "res://assets/heroes/tank_idle.png"
 const RANGER_SPRITE_PATH := "res://assets/heroes/ranger_idle.png"
 const ROGUE_SPRITE_PATH := "res://assets/heroes/rogue_idle.png"
+const HERO_SIZE_MULT := 1.5
+const HERO_UNIFORM_BASE_SCALE := Vector2(0.98, 0.98)
+const HERO_MOVE_SPEED_MULT := 0.94
+const HERO_DAMAGE_MULT := 1.56
 
 var kind: int = HeroKind.KNIGHT
 var hero_name: String = "Knight"
@@ -34,11 +39,22 @@ var melee_swing_half_angle: float = 0.0
 var melee_swing_reach: float = 0.0
 var melee_swing_direction: Vector2 = Vector2.RIGHT
 var melee_swing_color: Color = Color(1.0, 1.0, 1.0, 0.9)
+var melee_swing_secondary_timer: float = 0.0
+var melee_swing_secondary_half_angle: float = 0.0
+var melee_swing_secondary_reach: float = 0.0
+var melee_swing_secondary_direction: Vector2 = Vector2.LEFT
+var melee_swing_secondary_color: Color = Color(0.8, 1.0, 0.9, 0.8)
 var hero_sprite: AnimatedSprite2D = null
 var facing_left: bool = false
 
 var rogue_halo_damage_bonus_mult: float = 0.0
 var rogue_halo_speed_bonus_mult: float = 0.0
+var rogue_dual_strike_unlocked: bool = false
+var tank_heavy_attack_unlocked: bool = false
+var tank_heavy_charge_timer: float = 0.0
+var tank_heavy_cooldown_timer: float = 0.0
+var tank_heavy_target_point: Vector2 = Vector2.ZERO
+var ranger_triple_arrows_unlocked: bool = false
 var ranger_heal_visual_radius: float = 0.0
 var ranger_heal_pulse_timer: float = 0.0
 var ranger_heal_pulse_phase: float = 0.0
@@ -48,6 +64,8 @@ const ROGUE_ASSIST_THREAT_RADIUS := 225.0
 const ROGUE_GUARD_PADDING := 40.0
 const ROGUE_ANCHOR_TOLERANCE := 12.0
 const ROGUE_TOO_CLOSE_MULT := 0.8
+const ROGUE_GUARD_LOCK_DURATION := 0.65
+const ROGUE_GUARD_SWAP_HEALTH_MARGIN := 0.08
 const HERO_COHESION_DISTANCE := 195.0
 const HERO_REJOIN_DISTANCE := 275.0
 const HERO_DODGE_PADDING := 26.0
@@ -59,6 +77,29 @@ const HEALER_ANCHOR_SOFT_MIN := 120.0
 const HEALER_ANCHOR_HARD_MIN := 180.0
 const HEALER_ANCHOR_BLEND := 0.74
 const WALL_SLIDE_MARGIN := 18.0
+const FORMATION_RADIUS := 74.0
+const FORMATION_SOFT_RADIUS := 24.0
+const FORMATION_HARD_RADIUS := 92.0
+const FORMATION_BLEND := 0.96
+const HIT_FLASH_DURATION := 0.12
+const LEADER_ROAM_RADIUS := 128.0
+const LEADER_LEASH_RADIUS := 182.0
+const LEADER_MAX_RADIUS := 235.0
+const TANK_HEAVY_CHARGE_TIME := 0.26
+const TANK_HEAVY_COOLDOWN := 3.8
+const TANK_HEAVY_RADIUS_BONUS := 96.0
+const TANK_HEAVY_DAMAGE_MULT := 2.35
+const RANGER_TRIPLE_SPREAD := 0.2
+
+var rogue_guard_ally: Hero = null
+var rogue_guard_lock_timer: float = 0.0
+var rogue_velocity_smooth: Vector2 = Vector2.ZERO
+var knockback_velocity: Vector2 = Vector2.ZERO
+var hit_flash_timer: float = 0.0
+var pending_damage_source: Vector2 = Vector2.ZERO
+var bob_phase: float = 0.0
+var bob_amp: float = 0.0
+var bob_freq: float = 0.0
 
 func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	kind = hero_kind
@@ -97,6 +138,9 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 			preferred_distance = 94.0
 
 	health = max_health
+	move_speed *= HERO_MOVE_SPEED_MULT
+	attack_damage *= HERO_DAMAGE_MULT
+	body_radius *= HERO_SIZE_MULT
 	attack_timer = randf_range(0.12, 0.5)
 	pull_pulse_timer = randf_range(0.2, 0.7)
 	support_pulse_timer = randf_range(0.3, 0.95)
@@ -105,12 +149,36 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	melee_swing_half_angle = 0.0
 	melee_swing_reach = 0.0
 	melee_swing_direction = Vector2.RIGHT
+	melee_swing_secondary_timer = 0.0
+	melee_swing_secondary_half_angle = 0.0
+	melee_swing_secondary_reach = 0.0
+	melee_swing_secondary_direction = Vector2.LEFT
 	visual_time = randf() * 100.0
 	rogue_halo_damage_bonus_mult = 0.0
 	rogue_halo_speed_bonus_mult = 0.0
+	rogue_dual_strike_unlocked = false
+	tank_heavy_attack_unlocked = false
+	tank_heavy_charge_timer = 0.0
+	tank_heavy_cooldown_timer = 0.0
+	tank_heavy_target_point = global_position + Vector2.RIGHT * 10.0
+	ranger_triple_arrows_unlocked = false
 	ranger_heal_visual_radius = 0.0
 	ranger_heal_pulse_timer = 0.0
 	ranger_heal_pulse_phase = randf() * TAU
+	knockback_velocity = Vector2.ZERO
+	hit_flash_timer = 0.0
+	pending_damage_source = Vector2.ZERO
+	bob_phase = randf() * TAU
+	match kind:
+		HeroKind.KNIGHT:
+			bob_amp = 1.15
+			bob_freq = 3.1
+		HeroKind.RANGER:
+			bob_amp = 1.8
+			bob_freq = 3.9
+		HeroKind.ROGUE:
+			bob_amp = 2.25
+			bob_freq = 4.8
 	facing_left = false
 	_ensure_hero_sprite()
 	_sync_hero_sprite_visuals()
@@ -121,6 +189,13 @@ func process_tick(delta: float, enemies: Array[Enemy], heroes: Array[Hero], aren
 		return
 
 	attack_timer = maxf(0.0, attack_timer - delta)
+	rogue_guard_lock_timer = maxf(0.0, rogue_guard_lock_timer - delta)
+	knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 420.0 * delta)
+	tank_heavy_cooldown_timer = maxf(0.0, tank_heavy_cooldown_timer - delta)
+	if tank_heavy_charge_timer > 0.0:
+		tank_heavy_charge_timer = maxf(0.0, tank_heavy_charge_timer - delta)
+		if tank_heavy_charge_timer <= 0.0 and kind == HeroKind.KNIGHT and tank_heavy_attack_unlocked:
+			_execute_tank_heavy_attack(enemies)
 
 	var target: Enemy = _select_movement_target(enemies, heroes)
 	if is_player_controlled:
@@ -163,6 +238,7 @@ func _move_player_controlled(delta: float, player_move_input: Vector2, enemies: 
 	var dodge: Vector2 = _compute_enemy_avoidance(enemies)
 	if dodge.length_squared() > 0.0001:
 		velocity += dodge * move_speed * 0.35
+	velocity += knockback_velocity
 	if velocity.length() > move_speed * 1.45:
 		velocity = velocity.normalized() * move_speed * 1.45
 	_update_facing_from_velocity(velocity)
@@ -193,7 +269,7 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 					var tangent: Vector2 = Vector2(-to_target.y, to_target.x).normalized()
 					velocity = tangent * move_speed * 0.64
 		HeroKind.ROGUE:
-			var ally: Hero = _find_ally_needing_help(heroes, enemies)
+			var ally: Hero = _resolve_rogue_guard_ally(heroes, enemies)
 			if ally != null:
 				var desired_spacing: float = ally.body_radius + body_radius + ROGUE_GUARD_PADDING
 				var anchor: Vector2 = ally.global_position
@@ -228,6 +304,7 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 						var tangent: Vector2 = Vector2(-orbit_axis.y, orbit_axis.x).normalized()
 						velocity = tangent * move_speed * 0.82
 			elif target != null:
+				rogue_guard_ally = null
 				var chase_mult: float = 1.04 if not has_halo else 1.18 + rogue_halo_speed_bonus_mult
 				velocity = (target.global_position - global_position).normalized() * move_speed * chase_mult
 
@@ -245,6 +322,7 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 	# Keep non-controlled heroes feeling like a party: chase threats, but snap back when too spread.
 	velocity = _apply_party_cohesion(velocity, heroes)
 	velocity = _apply_healer_anchor(velocity, heroes)
+	velocity = _apply_controlled_leader_formation(velocity, heroes)
 
 	var dodge: Vector2 = _compute_enemy_avoidance(enemies)
 	if dodge.length_squared() > 0.0001:
@@ -258,6 +336,14 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 				dodge_mult = 0.82
 		velocity += dodge * move_speed * dodge_mult
 
+	# Rogue guard AI can oscillate when ally-threat vectors change quickly.
+	# Smooth its final steering a bit so movement stays fast but less jittery.
+	if kind == HeroKind.ROGUE and not is_player_controlled:
+		var smooth_t: float = clampf(delta * 12.0, 0.0, 1.0)
+		rogue_velocity_smooth = rogue_velocity_smooth.lerp(velocity, smooth_t)
+		velocity = rogue_velocity_smooth
+	velocity += knockback_velocity
+
 	if velocity.length() > move_speed * 1.45:
 		velocity = velocity.normalized() * move_speed * 1.45
 	_update_facing_from_velocity(velocity)
@@ -268,18 +354,32 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 	global_position.y = clampf(global_position.y, arena_rect.position.y + body_radius, arena_rect.end.y - body_radius)
 
 func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[Dictionary]) -> void:
-	if target == null:
-		return
 	if attack_timer > 0.0:
 		return
 
-	var distance: float = global_position.distance_to(target.global_position)
+	var active_target: Enemy = target
+	if active_target == null or active_target.health <= 0.0:
+		active_target = _find_nearest_enemy(enemies)
+	if active_target == null:
+		return
+
+	var distance: float = global_position.distance_to(active_target.global_position)
 	if kind == HeroKind.RANGER:
-		if distance > attack_range + 26.0:
-			return
+		var ranged_limit: float = attack_range + 96.0
+		if distance > ranged_limit:
+			var ranged_fallback: Enemy = _find_nearest_enemy(enemies, ranged_limit)
+			if ranged_fallback == null:
+				return
+			active_target = ranged_fallback
+			distance = global_position.distance_to(active_target.global_position)
 	else:
-		if distance > attack_range + body_radius + 4.0:
-			return
+		var melee_limit: float = attack_range + body_radius + 4.0
+		if distance > melee_limit:
+			var melee_fallback: Enemy = _find_nearest_enemy(enemies, melee_limit)
+			if melee_fallback == null:
+				return
+			active_target = melee_fallback
+			distance = global_position.distance_to(active_target.global_position)
 
 	var damage_mult: float = 1.0
 	if has_halo:
@@ -296,25 +396,54 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 	var dealt_damage: float = attack_damage * damage_mult
 	if kind == HeroKind.RANGER:
 		var shot_speed: float = 540.0 if has_halo else 438.0
-		projectile_spawns.append({
-			"team": "hero",
-			"position": global_position,
-			"target_position": target.global_position,
-			"damage": dealt_damage,
-			"speed": shot_speed,
-			"radius": 5.0,
-			"life": 2.0,
-			"color": Color(0.98, 0.46, 0.92),
-			"homing_target": target,
-			"homing_turn_rate": 6.0 if has_halo else 4.2
-		})
+		if ranger_triple_arrows_unlocked:
+			var base_dir: Vector2 = (active_target.global_position - global_position).normalized()
+			if base_dir.length_squared() <= 0.0001:
+				base_dir = Vector2.RIGHT
+			for shot_angle in [-RANGER_TRIPLE_SPREAD, 0.0, RANGER_TRIPLE_SPREAD]:
+				var dir: Vector2 = base_dir.rotated(float(shot_angle))
+				var is_center: bool = is_zero_approx(float(shot_angle))
+				var homing_rate: float = 6.0 if has_halo else 4.2
+				if not is_center:
+					homing_rate = 5.1 if has_halo else 3.7
+				projectile_spawns.append({
+					"team": "hero",
+					"position": global_position,
+					"target_position": global_position + dir * 320.0,
+					"damage": dealt_damage * 0.7,
+					"speed": shot_speed,
+					"radius": 5.0,
+					"life": 2.0,
+					"color": Color(0.98, 0.46, 0.92),
+					"homing_target": active_target,
+					"homing_turn_rate": homing_rate
+				})
+		else:
+			projectile_spawns.append({
+				"team": "hero",
+				"position": global_position,
+				"target_position": active_target.global_position,
+				"damage": dealt_damage,
+				"speed": shot_speed,
+				"radius": 5.0,
+				"life": 2.0,
+				"color": Color(0.98, 0.46, 0.92),
+				"homing_target": active_target,
+				"homing_turn_rate": 6.0 if has_halo else 4.2
+			})
 		attack_timer = attack_cooldown * (0.86 if has_halo else 1.0)
 		return
 
-	var attack_dir: Vector2 = (target.global_position - global_position).normalized()
+	var attack_dir: Vector2 = (active_target.global_position - global_position).normalized()
 	if attack_dir.length_squared() <= 0.0001:
 		attack_dir = Vector2.RIGHT
 	_update_facing_from_velocity(attack_dir)
+
+	if kind == HeroKind.KNIGHT and tank_heavy_attack_unlocked and tank_heavy_charge_timer <= 0.0 and tank_heavy_cooldown_timer <= 0.0:
+		tank_heavy_charge_timer = TANK_HEAVY_CHARGE_TIME
+		tank_heavy_target_point = active_target.global_position
+		attack_timer = maxf(attack_cooldown * 0.36, TANK_HEAVY_CHARGE_TIME)
+		return
 
 	var melee_reach: float = attack_range + body_radius + 4.0
 	var melee_half_angle: float = deg_to_rad(46.0)
@@ -331,6 +460,13 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 
 	var hit_count: int = _apply_melee_cone_damage(enemies, attack_dir, melee_reach, melee_half_angle, dealt_damage)
 	_start_melee_swing(attack_dir, melee_reach, melee_half_angle, swing_color)
+	if kind == HeroKind.ROGUE and rogue_dual_strike_unlocked:
+		var offhand_dir: Vector2 = -attack_dir
+		var offhand_damage: float = dealt_damage * 0.8
+		var offhand_half_angle: float = melee_half_angle * 0.9
+		var offhand_reach: float = melee_reach * 0.95
+		hit_count += _apply_melee_cone_damage(enemies, offhand_dir, offhand_reach, offhand_half_angle, offhand_damage)
+		_start_secondary_melee_swing(offhand_dir, offhand_reach, offhand_half_angle, Color(0.74, 1.0, 0.84, 0.9))
 	if hit_count > 0 and kind == HeroKind.KNIGHT and has_halo:
 		for enemy: Enemy in enemies:
 			if enemy.health <= 0.0:
@@ -360,10 +496,38 @@ func _apply_melee_cone_damage(enemies: Array[Enemy], attack_dir: Vector2, reach:
 		var forward_dot: float = dir.dot(to_enemy / dist)
 		if forward_dot < cos_half_angle:
 			continue
+		enemy.set_damage_source(global_position)
 		enemy.take_damage(damage)
 		hit_count += 1
 
 	return hit_count
+
+func _execute_tank_heavy_attack(enemies: Array[Enemy]) -> void:
+	if health <= 0.0:
+		return
+	var to_target: Vector2 = tank_heavy_target_point - global_position
+	var attack_dir: Vector2 = to_target.normalized() if to_target.length_squared() > 0.0001 else Vector2.RIGHT
+	var heavy_reach: float = attack_range + body_radius + TANK_HEAVY_RADIUS_BONUS
+	var heavy_damage: float = attack_damage * TANK_HEAVY_DAMAGE_MULT
+	var hit_count: int = 0
+	for enemy: Enemy in enemies:
+		if enemy.health <= 0.0:
+			continue
+		var dist: float = enemy.global_position.distance_to(global_position)
+		if dist > heavy_reach + enemy.body_radius:
+			continue
+		enemy.set_damage_source(global_position)
+		enemy.take_damage(heavy_damage)
+		hit_count += 1
+	_start_melee_swing(attack_dir, heavy_reach, deg_to_rad(172.0), Color(0.74, 0.92, 1.0, 0.96))
+	if hit_count > 0:
+		for enemy: Enemy in enemies:
+			if enemy.health <= 0.0:
+				continue
+			if enemy.global_position.distance_to(global_position) <= heavy_reach:
+				enemy.apply_pull_towards(global_position, 26.0)
+	tank_heavy_cooldown_timer = TANK_HEAVY_COOLDOWN
+	queue_redraw()
 
 func _start_melee_swing(dir: Vector2, reach: float, half_angle: float, color: Color) -> void:
 	melee_swing_timer = melee_swing_duration
@@ -371,6 +535,14 @@ func _start_melee_swing(dir: Vector2, reach: float, half_angle: float, color: Co
 	melee_swing_reach = reach
 	melee_swing_half_angle = half_angle
 	melee_swing_color = color
+	queue_redraw()
+
+func _start_secondary_melee_swing(dir: Vector2, reach: float, half_angle: float, color: Color) -> void:
+	melee_swing_secondary_timer = melee_swing_duration * 0.92
+	melee_swing_secondary_direction = dir.normalized()
+	melee_swing_secondary_reach = reach
+	melee_swing_secondary_half_angle = half_angle
+	melee_swing_secondary_color = color
 	queue_redraw()
 
 func _find_nearest_enemy(enemies: Array[Enemy], max_distance: float = -1.0) -> Enemy:
@@ -421,6 +593,38 @@ func _find_ally_needing_help(heroes: Array[Hero], enemies: Array[Enemy]) -> Hero
 		return null
 	return result
 
+func _resolve_rogue_guard_ally(heroes: Array[Hero], enemies: Array[Enemy]) -> Hero:
+	if kind != HeroKind.ROGUE:
+		return null
+
+	if rogue_guard_ally != null and (not is_instance_valid(rogue_guard_ally) or rogue_guard_ally.health <= 0.0):
+		rogue_guard_ally = null
+		rogue_guard_lock_timer = 0.0
+
+	var candidate: Hero = _find_ally_needing_help(heroes, enemies)
+	if rogue_guard_ally == null:
+		if candidate != null:
+			rogue_guard_ally = candidate
+			rogue_guard_lock_timer = ROGUE_GUARD_LOCK_DURATION
+		return rogue_guard_ally
+
+	if candidate == null:
+		if rogue_guard_lock_timer <= 0.0:
+			rogue_guard_ally = null
+		return rogue_guard_ally
+
+	if candidate != rogue_guard_ally:
+		var current_ratio: float = rogue_guard_ally.health_ratio()
+		var candidate_ratio: float = candidate.health_ratio()
+		var should_swap: bool = candidate_ratio < (current_ratio - ROGUE_GUARD_SWAP_HEALTH_MARGIN)
+		if should_swap and rogue_guard_lock_timer <= 0.0:
+			rogue_guard_ally = candidate
+			rogue_guard_lock_timer = ROGUE_GUARD_LOCK_DURATION
+	else:
+		rogue_guard_lock_timer = ROGUE_GUARD_LOCK_DURATION
+
+	return rogue_guard_ally
+
 func _nearest_enemy_distance_to_point(enemies: Array[Enemy], point: Vector2) -> float:
 	var nearest_dist: float = INF
 	for enemy: Enemy in enemies:
@@ -438,6 +642,64 @@ func _find_halo_anchor(heroes: Array[Hero]) -> Hero:
 		if hero.has_halo:
 			return hero
 	return null
+
+func _find_controlled_leader(heroes: Array[Hero]) -> Hero:
+	for hero: Hero in heroes:
+		if hero.health <= 0.0:
+			continue
+		if hero.is_player_controlled:
+			return hero
+	return null
+
+func _apply_controlled_leader_formation(base_velocity: Vector2, heroes: Array[Hero]) -> Vector2:
+	if is_player_controlled or health <= 0.0:
+		return base_velocity
+
+	var leader: Hero = _find_controlled_leader(heroes)
+	if leader == null or leader == self:
+		return base_velocity
+
+	var follower_count: int = 0
+	var my_slot: int = -1
+	for hero: Hero in heroes:
+		if hero.health <= 0.0 or hero == leader:
+			continue
+		if hero == self:
+			my_slot = follower_count
+		follower_count += 1
+
+	if my_slot < 0 or follower_count <= 0:
+		return base_velocity
+
+	var slot_step: float = TAU / float(follower_count + 1)
+	var slot_angle: float = -PI * 0.5 + slot_step * float(my_slot + 1)
+	var desired: Vector2 = leader.global_position + Vector2.RIGHT.rotated(slot_angle) * FORMATION_RADIUS
+	var to_slot: Vector2 = desired - global_position
+	var dist: float = to_slot.length()
+	var to_leader: Vector2 = leader.global_position - global_position
+	var dist_leader: float = to_leader.length()
+
+	# Inside roam radius: keep combat behavior, just mild slot attraction.
+	if dist_leader <= LEADER_ROAM_RADIUS:
+		if dist <= FORMATION_SOFT_RADIUS or dist <= 0.001:
+			return base_velocity
+		var t_soft: float = clampf((dist - FORMATION_SOFT_RADIUS) / maxf(FORMATION_HARD_RADIUS - FORMATION_SOFT_RADIUS, 0.01), 0.0, 1.0)
+		var slot_velocity_soft: Vector2 = to_slot.normalized() * move_speed * (0.46 + t_soft * 0.24)
+		return base_velocity.lerp(slot_velocity_soft, 0.2 + t_soft * 0.16)
+
+	# Between roam and leash: allow aggression, but bias back toward formation.
+	if dist_leader <= LEADER_LEASH_RADIUS:
+		var t_mid: float = (dist_leader - LEADER_ROAM_RADIUS) / maxf(LEADER_LEASH_RADIUS - LEADER_ROAM_RADIUS, 0.01)
+		var slot_velocity_mid: Vector2 = to_slot.normalized() * move_speed * 0.9 if dist > 0.001 else Vector2.ZERO
+		return base_velocity.lerp(slot_velocity_mid, clampf(0.35 + t_mid * 0.3, 0.0, 0.82))
+
+	# Hard leash: pull back strongly so party stays together.
+	if dist_leader >= LEADER_MAX_RADIUS:
+		return to_leader.normalized() * move_speed * 1.26
+
+	var t_hard: float = (dist_leader - LEADER_LEASH_RADIUS) / maxf(LEADER_MAX_RADIUS - LEADER_LEASH_RADIUS, 0.01)
+	var pull_velocity: Vector2 = to_leader.normalized() * move_speed * (0.96 + t_hard * 0.24)
+	return base_velocity.lerp(pull_velocity, clampf(0.72 + t_hard * 0.22, 0.0, 0.95))
 
 func _find_active_ranger_healer(heroes: Array[Hero]) -> Hero:
 	for hero: Hero in heroes:
@@ -547,14 +809,7 @@ func _hero_sprite_path_for_kind(hero_kind: int) -> String:
 	return ""
 
 func _hero_sprite_scale_for_kind(hero_kind: int) -> Vector2:
-	match hero_kind:
-		HeroKind.KNIGHT:
-			return Vector2(0.95, 0.95)
-		HeroKind.RANGER:
-			return Vector2(0.72, 0.72)
-		HeroKind.ROGUE:
-			return Vector2(0.72, 0.72)
-	return Vector2.ONE
+	return HERO_UNIFORM_BASE_SCALE * HERO_SIZE_MULT
 
 func _ensure_hero_sprite() -> void:
 	if hero_sprite != null:
@@ -582,7 +837,7 @@ func _ensure_hero_sprite() -> void:
 	var frames: SpriteFrames = SpriteFrames.new()
 	frames.add_animation(HERO_ANIM_NAME)
 	frames.set_animation_loop(HERO_ANIM_NAME, true)
-	frames.set_animation_speed(HERO_ANIM_NAME, 10.0)
+	frames.set_animation_speed(HERO_ANIM_NAME, 8.0)
 	for i in range(frame_count):
 		var atlas: AtlasTexture = AtlasTexture.new()
 		atlas.atlas = texture
@@ -612,10 +867,21 @@ func _sync_hero_sprite_visuals() -> void:
 	if hero_sprite == null:
 		return
 	hero_sprite.flip_h = facing_left
+	hero_sprite.position = Vector2(0.0, _current_bob_offset())
 	if health <= 0.0:
 		hero_sprite.modulate = Color(0.34, 0.34, 0.34, 0.95)
 	else:
 		hero_sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
+
+func _current_bob_offset() -> float:
+	if health <= 0.0:
+		return 0.0
+	var halo_boost: float = 1.18 if has_halo else 1.0
+	var move_boost: float = 1.12 if is_player_controlled else 1.0
+	return sin(visual_time * bob_freq + bob_phase) * bob_amp * halo_boost * move_boost
+
+func set_damage_source(source_position: Vector2) -> void:
+	pending_damage_source = source_position
 
 func apply_damage(amount: float) -> void:
 	if health <= 0.0:
@@ -629,6 +895,22 @@ func apply_damage(amount: float) -> void:
 	elif kind == HeroKind.KNIGHT:
 		incoming *= 0.88
 	health = maxf(0.0, health - incoming)
+	hit_flash_timer = HIT_FLASH_DURATION
+	var source_position: Vector2 = pending_damage_source
+	pending_damage_source = Vector2.ZERO
+	if source_position != Vector2.ZERO:
+		var away: Vector2 = global_position - source_position
+		if away.length_squared() > 0.0001:
+			var knockback_strength: float = 54.0
+			match kind:
+				HeroKind.KNIGHT:
+					knockback_strength = 34.0
+				HeroKind.RANGER:
+					knockback_strength = 50.0
+				HeroKind.ROGUE:
+					knockback_strength = 58.0
+			knockback_velocity += away.normalized() * knockback_strength
+	emit_signal("impact", global_position, 0.58)
 	_sync_hero_sprite_visuals()
 	queue_redraw()
 
@@ -656,6 +938,8 @@ func set_player_controlled(active: bool) -> void:
 	if is_player_controlled == active:
 		return
 	is_player_controlled = active
+	if active and kind == HeroKind.ROGUE:
+		rogue_velocity_smooth = Vector2.ZERO
 	queue_redraw()
 
 func trigger_halo_switch_feedback() -> void:
@@ -666,6 +950,9 @@ func process_visual_tick(delta: float) -> void:
 	visual_time += delta
 	_sync_hero_sprite_visuals()
 	var need_redraw := false
+	if hit_flash_timer > 0.0:
+		hit_flash_timer = maxf(0.0, hit_flash_timer - delta)
+		need_redraw = true
 	if switch_flash_timer > 0.0:
 		switch_flash_timer = maxf(0.0, switch_flash_timer - delta)
 		need_redraw = true
@@ -674,6 +961,11 @@ func process_visual_tick(delta: float) -> void:
 		need_redraw = true
 	if melee_swing_timer > 0.0:
 		melee_swing_timer = maxf(0.0, melee_swing_timer - delta)
+		need_redraw = true
+	if melee_swing_secondary_timer > 0.0:
+		melee_swing_secondary_timer = maxf(0.0, melee_swing_secondary_timer - delta)
+		need_redraw = true
+	if tank_heavy_charge_timer > 0.0:
 		need_redraw = true
 	if need_redraw:
 		queue_redraw()
@@ -719,12 +1011,17 @@ func _draw() -> void:
 	if health <= 0.0:
 		color = Color(0.2, 0.2, 0.2, 0.95)
 	var draw_body: bool = hero_sprite == null
+	var bob_y: float = _current_bob_offset()
 	if draw_body:
-		draw_circle(Vector2.ZERO, body_radius, color)
+		draw_circle(Vector2(0.0, bob_y), body_radius, color)
+
+	if hit_flash_timer > 0.0:
+		var flash_t: float = hit_flash_timer / HIT_FLASH_DURATION
+		draw_circle(Vector2(0.0, bob_y), body_radius + 5.0, Color(1.0, 1.0, 1.0, 0.28 * flash_t))
 
 	if has_halo and health > 0.0:
-		draw_arc(Vector2.ZERO, body_radius + 8.0, 0.0, TAU, 36, Color(1.0, 0.95, 0.45), 4.0)
-		draw_circle(Vector2.ZERO, body_radius + 3.0, Color(1.0, 0.95, 0.45, 0.2))
+		draw_arc(Vector2(0.0, bob_y), body_radius + 8.0, 0.0, TAU, 36, Color(1.0, 0.95, 0.45), 4.0)
+		draw_circle(Vector2(0.0, bob_y), body_radius + 3.0, Color(1.0, 0.95, 0.45, 0.2))
 
 	if kind == HeroKind.RANGER and ranger_heal_visual_radius > 0.0 and ranger_heal_pulse_timer > 0.0:
 		var t: float = 1.0 - (ranger_heal_pulse_timer / RANGER_HEAL_PULSE_DURATION)
@@ -734,10 +1031,10 @@ func _draw() -> void:
 		for i in range(particles):
 			var angle: float = ranger_heal_pulse_phase + TAU * float(i) / float(particles)
 			var jitter: float = sin(visual_time * 7.2 + float(i) * 1.37) * 3.2
-			var p: Vector2 = Vector2.RIGHT.rotated(angle) * (pulse_radius + jitter)
+			var p: Vector2 = Vector2(0.0, bob_y) + Vector2.RIGHT.rotated(angle) * (pulse_radius + jitter)
 			var r: float = 1.2 + (1.0 - t) * 0.9
 			draw_circle(p, r, Color(1.0, 0.88, 1.0, 0.82 * alpha))
-		draw_arc(Vector2.ZERO, pulse_radius, 0.0, TAU, 56, Color(0.92, 0.66, 1.0, 0.34 * alpha), 2.0)
+		draw_arc(Vector2(0.0, bob_y), pulse_radius, 0.0, TAU, 56, Color(0.92, 0.66, 1.0, 0.34 * alpha), 2.0)
 
 	if melee_swing_timer > 0.0 and kind != HeroKind.RANGER:
 		var swing_t: float = 1.0 - (melee_swing_timer / maxf(melee_swing_duration, 0.001))
@@ -746,16 +1043,29 @@ func _draw() -> void:
 		var end_angle: float = center_angle + melee_swing_half_angle
 		var radius: float = body_radius + (melee_swing_reach - body_radius) * (0.36 + swing_t * 0.28)
 		var alpha_swing: float = clampf(1.0 - swing_t, 0.0, 1.0)
-		draw_arc(Vector2.ZERO, radius, start_angle, end_angle, 24, Color(melee_swing_color.r, melee_swing_color.g, melee_swing_color.b, 0.95 * alpha_swing), 3.0)
+		draw_arc(Vector2(0.0, bob_y), radius, start_angle, end_angle, 24, Color(melee_swing_color.r, melee_swing_color.g, melee_swing_color.b, 0.95 * alpha_swing), 3.0)
+	if melee_swing_secondary_timer > 0.0 and kind == HeroKind.ROGUE:
+		var swing_t2: float = 1.0 - (melee_swing_secondary_timer / maxf(melee_swing_duration * 0.92, 0.001))
+		var center_angle2: float = melee_swing_secondary_direction.angle()
+		var start_angle2: float = center_angle2 - melee_swing_secondary_half_angle
+		var end_angle2: float = center_angle2 + melee_swing_secondary_half_angle
+		var radius2: float = body_radius + (melee_swing_secondary_reach - body_radius) * (0.34 + swing_t2 * 0.24)
+		var alpha_swing2: float = clampf(1.0 - swing_t2, 0.0, 1.0)
+		draw_arc(Vector2(0.0, bob_y), radius2, start_angle2, end_angle2, 24, Color(melee_swing_secondary_color.r, melee_swing_secondary_color.g, melee_swing_secondary_color.b, 0.84 * alpha_swing2), 2.5)
 
 	if is_player_controlled and health > 0.0:
-		draw_arc(Vector2.ZERO, body_radius + 14.0, 0.0, TAU, 24, Color(0.8, 0.96, 1.0, 0.75), 2.5)
+		draw_arc(Vector2(0.0, bob_y), body_radius + 14.0, 0.0, TAU, 24, Color(0.8, 0.96, 1.0, 0.75), 2.5)
 
 	if switch_flash_timer > 0.0 and health > 0.0:
 		var t: float = switch_flash_timer / 0.24
 		var pulse_radius: float = body_radius + 8.0 + (1.0 - t) * 22.0
 		var pulse_color: Color = Color(1.0, 0.96, 0.62, 0.45 * t)
-		draw_arc(Vector2.ZERO, pulse_radius, 0.0, TAU, 36, pulse_color, 6.0 * t)
+		draw_arc(Vector2(0.0, bob_y), pulse_radius, 0.0, TAU, 36, pulse_color, 6.0 * t)
+
+	if kind == HeroKind.KNIGHT and tank_heavy_attack_unlocked and tank_heavy_charge_timer > 0.0 and health > 0.0:
+		var charge_t: float = tank_heavy_charge_timer / TANK_HEAVY_CHARGE_TIME
+		var charge_radius: float = body_radius + 20.0 + (1.0 - charge_t) * 18.0
+		draw_arc(Vector2(0.0, bob_y), charge_radius, 0.0, TAU, 40, Color(0.72, 0.9, 1.0, 0.5 * (1.0 - charge_t)), 3.0)
 
 	var bar_width := 38.0
 	var bar_height := 5.0

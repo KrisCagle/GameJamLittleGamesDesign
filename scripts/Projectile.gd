@@ -89,7 +89,7 @@ func _setup_projectile_visual() -> void:
 	var frames: SpriteFrames = SpriteFrames.new()
 	frames.add_animation(ENEMY_RANGED_PROJECTILE_ANIM)
 	frames.set_animation_loop(ENEMY_RANGED_PROJECTILE_ANIM, true)
-	frames.set_animation_speed(ENEMY_RANGED_PROJECTILE_ANIM, 16.0)
+	frames.set_animation_speed(ENEMY_RANGED_PROJECTILE_ANIM, 10.5)
 	for i in range(ENEMY_RANGED_PROJECTILE_FRAME_COUNT):
 		var atlas: AtlasTexture = AtlasTexture.new()
 		atlas.atlas = texture
@@ -103,7 +103,7 @@ func _setup_projectile_visual() -> void:
 	projectile_sprite.z_index = 6
 	projectile_sprite.sprite_frames = frames
 	projectile_sprite.animation = ENEMY_RANGED_PROJECTILE_ANIM
-	projectile_sprite.scale = Vector2(2.2, 2.2)
+	projectile_sprite.scale = Vector2(1.95, 1.95)
 	projectile_sprite.modulate = Color(1.0, 0.96, 0.94, 1.0)
 	add_child(projectile_sprite)
 	projectile_sprite.play(ENEMY_RANGED_PROJECTILE_ANIM)

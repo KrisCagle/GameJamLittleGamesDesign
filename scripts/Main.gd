@@ -48,6 +48,7 @@ const HERO_CARD_ROGUE_SHEET := "res://assets/heroes/rogue_idle.png"
 const START_MENU_TITLE_FONT_PATH := "res://assets/fonts/Starstruck.ttf"
 const FLOOR_TEXTURE_PATH := "res://assets/floor/floor_tileset12.png"
 const FLOOR_TEXTURE_CENTER_COVERAGE := 0.9
+const FLOOR_TEXTURE_WEB_COVERAGE_MULT := 0.52
 const FLOOR_TILE_SIZE := 104.0
 const FLOOR_PATTERN_PAD := 220.0
 const WALL_FRAME_THICKNESS := 34.0
@@ -1827,7 +1828,10 @@ func _draw_floor_pattern(view_rect: Rect2) -> void:
 		if tex_w > 0.0 and tex_h > 0.0:
 			# Draw this floor art once, centered, so the medallion appears only in the middle.
 			draw_rect(arena_rect, Color(0.06, 0.1, 0.14, 0.95), true)
-			var max_h: float = arena_rect.size.y * FLOOR_TEXTURE_CENTER_COVERAGE
+			var coverage: float = FLOOR_TEXTURE_CENTER_COVERAGE
+			if OS.has_feature("web"):
+				coverage *= FLOOR_TEXTURE_WEB_COVERAGE_MULT
+			var max_h: float = arena_rect.size.y * coverage
 			var draw_h: float = max_h
 			var draw_w: float = draw_h * (tex_w / maxf(tex_h, 0.001))
 			var max_w: float = arena_rect.size.x * 0.94

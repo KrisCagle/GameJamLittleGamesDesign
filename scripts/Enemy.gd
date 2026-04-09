@@ -49,6 +49,7 @@ var swarm_sprite: AnimatedSprite2D = null
 var ranged_sprite: AnimatedSprite2D = null
 var ranged_facing_left: bool = false
 var hit_flash_timer: float = 0.0
+var hit_flash_strength: float = 0.0
 var knockback_velocity: Vector2 = Vector2.ZERO
 var pending_damage_source: Vector2 = Vector2.ZERO
 
@@ -119,6 +120,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 	body_radius *= ENEMY_SIZE_MULT
 	ranged_facing_left = false
 	hit_flash_timer = 0.0
+	hit_flash_strength = 0.0
 	knockback_velocity = Vector2.ZERO
 	pending_damage_source = Vector2.ZERO
 	target_refresh_timer = randf_range(1.0, 2.1)
@@ -489,6 +491,7 @@ func take_damage(amount: float) -> void:
 		incoming *= 1.58
 	health = maxf(0.0, health - incoming)
 	hit_flash_timer = ENEMY_HIT_FLASH_DURATION
+	hit_flash_strength = clampf(incoming / maxf(max_health * 0.16, 0.01), 0.0, 1.2)
 	var source_position: Vector2 = pending_damage_source
 	pending_damage_source = Vector2.ZERO
 	if source_position != Vector2.ZERO and kind != EnemyKind.BOSS:
@@ -532,7 +535,9 @@ func _draw() -> void:
 		draw_color = Color(1.0, 0.74, 0.52)
 	if hit_flash_timer > 0.0:
 		var flash_t: float = hit_flash_timer / ENEMY_HIT_FLASH_DURATION
-		draw_color = draw_color.lerp(Color(1.0, 0.96, 0.9), 0.42 * flash_t)
+		var flash_gain: float = clampf(0.42 + hit_flash_strength * 0.45, 0.0, 0.95)
+		draw_color = draw_color.lerp(Color(1.0, 0.96, 0.9), flash_gain * flash_t)
+		draw_circle(Vector2.ZERO, body_radius + 3.0 + hit_flash_strength * 2.0, Color(1.0, 0.94, 0.72, 0.12 * flash_t * (1.0 + hit_flash_strength)))
 
 	var draw_sprite_body: bool = true
 	if kind == EnemyKind.SWARM and swarm_sprite != null and swarm_sprite.visible:

@@ -70,6 +70,16 @@ const WAVE_SPAWN_INTERVAL_DECAY := 0.014
 const CAMERA_SHAKE_DURATION := 0.16
 const CAMERA_SHAKE_DECAY := 26.0
 const CAMERA_SHAKE_MAX := 8.0
+const TEAM_POWER_TIGHT_RADIUS := 102.0
+const TEAM_POWER_SPREAD_RADIUS := 268.0
+const TEAM_POWER_SMOOTH := 5.6
+const TEAM_POWER_REGEN_THRESHOLD := 0.56
+const TEAM_POWER_REGEN_PER_SEC := 1.05
+const TEAM_LINK_MAX_DISTANCE := 220.0
+const TEAM_LINK_MAX_ALPHA := 0.26
+const TEAM_CIRCLE_BASE_RADIUS := 116.0
+const TEAM_CIRCLE_MAX_RADIUS := 178.0
+const KILL_FLASH_DURATION := 0.24
 const ENABLE_SFX := false
 const SFX_MIX_RATE := 32000.0
 const SFX_BUFFER_LENGTH := 0.16
@@ -151,6 +161,10 @@ var low_spec_mode: bool = false
 var camera_shake_timer: float = 0.0
 var camera_shake_strength: float = 0.0
 var camera_shake_offset: Vector2 = Vector2.ZERO
+var team_power: float = 0.0
+var team_power_center: Vector2 = Vector2.ZERO
+var team_power_radius: float = TEAM_CIRCLE_BASE_RADIUS
+var kill_flashes: Array[Dictionary] = []
 var sfx_player: AudioStreamPlayer = null
 var sfx_playback: AudioStreamGeneratorPlayback = null
 var sfx_cooldown_timer: float = 0.0
@@ -200,6 +214,7 @@ func _process(delta: float) -> void:
 	sfx_cooldown_timer = maxf(0.0, sfx_cooldown_timer - delta)
 
 	if start_selection_active:
+		_update_kill_flashes(delta)
 		_update_dynamic_lighting(delta)
 		_update_camera(delta)
 		_update_ui()
@@ -207,6 +222,7 @@ func _process(delta: float) -> void:
 		return
 
 	if game_over:
+		_update_kill_flashes(delta)
 		_update_dynamic_lighting(delta)
 		_update_camera(delta)
 		_update_ui()
@@ -214,6 +230,7 @@ func _process(delta: float) -> void:
 		return
 
 	if upgrade_phase_active:
+		_update_kill_flashes(delta)
 		_update_dynamic_lighting(delta)
 		_update_camera(delta)
 		_update_ui()
@@ -242,6 +259,8 @@ func _process(delta: float) -> void:
 	_validate_halo_target()
 	_check_for_game_over()
 	_progress_wave_timing(delta)
+	_update_team_power(delta)
+	_update_kill_flashes(delta)
 	_update_dynamic_lighting(delta)
 	_update_camera(delta)
 	_update_ui()
@@ -906,8 +925,68 @@ func _clamp_point_to_arena(point: Vector2) -> Vector2:
 func _cleanup_dead_enemies() -> void:
 	for i in range(enemies.size() - 1, -1, -1):
 		if enemies[i].health <= 0.0:
+			var dead_enemy: Enemy = enemies[i]
+			_spawn_kill_flash(dead_enemy.global_position, dead_enemy.body_radius)
+			_add_camera_shake(0.2 + team_power * 0.45)
 			enemies[i].queue_free()
 			enemies.remove_at(i)
+
+func _spawn_kill_flash(position: Vector2, body_radius: float) -> void:
+	var flash: Dictionary = {
+		"position": position,
+		"time": KILL_FLASH_DURATION,
+		"max_time": KILL_FLASH_DURATION,
+		"radius": maxf(16.0, body_radius * 2.5)
+	}
+	kill_flashes.append(flash)
+
+func _update_kill_flashes(delta: float) -> void:
+	for i in range(kill_flashes.size() - 1, -1, -1):
+		var flash: Dictionary = kill_flashes[i]
+		var time_left: float = float(flash.get("time", 0.0)) - delta
+		if time_left <= 0.0:
+			kill_flashes.remove_at(i)
+			continue
+		flash["time"] = time_left
+		kill_flashes[i] = flash
+
+func _update_team_power(delta: float) -> void:
+	var alive: Array[Hero] = []
+	for hero: Hero in heroes:
+		if hero.health > 0.0:
+			alive.append(hero)
+
+	if alive.is_empty():
+		team_power = 0.0
+		team_power_center = arena_rect.get_center()
+		team_power_radius = TEAM_CIRCLE_BASE_RADIUS
+		return
+
+	var anchor: Vector2 = _camera_target_position()
+	if halo_index >= 0 and halo_index < heroes.size():
+		var lead: Hero = heroes[halo_index]
+		if lead.health > 0.0:
+			anchor = lead.global_position
+	team_power_center = anchor
+
+	var avg_dist: float = 0.0
+	for hero: Hero in alive:
+		avg_dist += hero.global_position.distance_to(anchor)
+	avg_dist /= float(alive.size())
+
+	var spread_t: float = (avg_dist - TEAM_POWER_TIGHT_RADIUS) / maxf(TEAM_POWER_SPREAD_RADIUS - TEAM_POWER_TIGHT_RADIUS, 0.01)
+	var target_power: float = clampf(1.0 - spread_t, 0.0, 1.0)
+	team_power = lerpf(team_power, target_power, clampf(delta * TEAM_POWER_SMOOTH, 0.0, 1.0))
+	team_power_radius = lerpf(TEAM_CIRCLE_MAX_RADIUS, TEAM_CIRCLE_BASE_RADIUS, team_power)
+
+	for hero: Hero in heroes:
+		hero.set_team_power(team_power)
+
+	if team_power > TEAM_POWER_REGEN_THRESHOLD:
+		var regen_t: float = (team_power - TEAM_POWER_REGEN_THRESHOLD) / maxf(1.0 - TEAM_POWER_REGEN_THRESHOLD, 0.01)
+		var regen_value: float = TEAM_POWER_REGEN_PER_SEC * regen_t * delta
+		for hero: Hero in alive:
+			hero.heal(regen_value)
 
 func _spawn_projectiles_from_queue() -> void:
 	if projectile_spawns.is_empty():
@@ -1141,7 +1220,7 @@ func _choose_starting_hero(index: int) -> void:
 func _upgrade_slot_rect(slot: int) -> Rect2:
 	var view_size: Vector2 = _viewport_size()
 	var width: float = 318.0
-	var height: float = 124.0
+	var height: float = 138.0
 	var gap: float = 16.0
 	var total_width: float = width * 3.0 + gap * 2.0
 	var start_x: float = (view_size.x - total_width) * 0.5
@@ -1285,6 +1364,7 @@ func _wrap_text_lines(text: String, max_chars_per_line: int, max_lines: int) -> 
 	var words: PackedStringArray = text.split(" ", false)
 	var lines: Array[String] = []
 	var current: String = ""
+	var truncated: bool = false
 
 	for word in words:
 		var candidate: String = word if current.is_empty() else current + " " + word
@@ -1292,12 +1372,21 @@ func _wrap_text_lines(text: String, max_chars_per_line: int, max_lines: int) -> 
 			lines.append(current)
 			current = word
 			if lines.size() >= max_lines:
+				truncated = true
 				break
 		else:
 			current = candidate
 
 	if lines.size() < max_lines and not current.is_empty():
 		lines.append(current)
+	elif not current.is_empty():
+		truncated = true
+
+	if truncated and not lines.is_empty():
+		var last_idx: int = lines.size() - 1
+		var last_line: String = lines[last_idx].strip_edges()
+		if not last_line.ends_with("..."):
+			lines[last_idx] = last_line + "..."
 
 	return lines
 
@@ -1498,6 +1587,7 @@ func _update_ui() -> void:
 	threat_label.text = "Enemies %d  |  Swarm %d  Ranged %d  Elite %d  Boss %d  |  Shots %d" % [enemies.size(), swarm_count, ranged_count, elite_count, boss_count, projectiles.size()]
 	var halo_pct: float = clampf((halo_charge / maxf(halo_charge_cap, 0.01)) * 100.0, 0.0, 999.0)
 	threat_label.text += "  |  Halo %.0f%%" % [halo_pct]
+	threat_label.text += "  |  Power %d%%" % int(round(team_power * 100.0))
 	if halo_equipped:
 		threat_label.text += " ACTIVE"
 	else:
@@ -1977,6 +2067,7 @@ func _draw() -> void:
 		return
 
 	_draw_world_backdrop(view_rect)
+	_draw_team_power_overlay()
 	_draw_readability_pass()
 
 	if halo_switch_feedback_timer > 0.0:
@@ -2011,7 +2102,7 @@ func _draw() -> void:
 		for i in range(upgrade_choices.size()):
 			var upgrade_id: int = upgrade_choices[i]
 			var title: String = "%d. %s" % [i + 1, _upgrade_name(upgrade_id)]
-			var desc_lines: Array[String] = _wrap_text_lines(_upgrade_description(upgrade_id), 34, 3)
+			var desc_lines: Array[String] = _wrap_text_lines(_upgrade_description(upgrade_id), 32, 3)
 			var rect_screen: Rect2 = _upgrade_slot_rect(i)
 			var is_hover: bool = rect_screen.has_point(hover_screen)
 			var rect: Rect2 = _screen_rect_to_world(rect_screen)
@@ -2022,8 +2113,74 @@ func _draw() -> void:
 				text_color = Color(1.0, 1.0, 1.0, 1.0)
 			draw_rect(rect, base_color, true)
 			draw_rect(rect, Color(0.9, 0.95, 1.0, 0.72), false, 2.0)
-			draw_string(card_font, rect.position + Vector2(14.0, 30.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24.0, 20, text_color)
+			draw_string(card_font, rect.position + Vector2(14.0, 30.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24.0, 19, text_color)
 			var y: float = 56.0
 			for line: String in desc_lines:
-				draw_string(card_font, rect.position + Vector2(14.0, y), line, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24.0, 16, Color(text_color.r, text_color.g, text_color.b, 0.9))
-				y += 19.0
+				draw_string(card_font, rect.position + Vector2(14.0, y), line, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24.0, 15, Color(text_color.r, text_color.g, text_color.b, 0.92))
+				y += 18.0
+
+func _draw_team_power_overlay() -> void:
+	if start_selection_active or upgrade_phase_active or heroes.is_empty():
+		return
+
+	_draw_team_links()
+	_draw_power_circle()
+	_draw_kill_flashes()
+
+func _draw_team_links() -> void:
+	var alive: Array[Hero] = []
+	for hero: Hero in heroes:
+		if hero.health > 0.0:
+			alive.append(hero)
+	if alive.size() <= 1:
+		return
+
+	for i in range(alive.size()):
+		for j in range(i + 1, alive.size()):
+			var a: Vector2 = alive[i].global_position
+			var b: Vector2 = alive[j].global_position
+			var dist: float = a.distance_to(b)
+			if dist > TEAM_LINK_MAX_DISTANCE:
+				continue
+			var closeness: float = 1.0 - dist / TEAM_LINK_MAX_DISTANCE
+			var alpha: float = TEAM_LINK_MAX_ALPHA * closeness * team_power
+			var width: float = 1.0 + 2.4 * closeness * team_power
+			draw_line(a, b, Color(0.68, 0.95, 1.0, alpha), width, true)
+			draw_circle(a.lerp(b, 0.5), 1.2 + 1.1 * closeness, Color(0.9, 0.98, 1.0, alpha * 0.9))
+
+func _draw_power_circle() -> void:
+	if team_power_center == Vector2.ZERO:
+		return
+	var pulse: float = 1.0 + sin(float(Time.get_ticks_msec()) * 0.0032) * (0.03 + team_power * 0.08)
+	var r: float = team_power_radius * pulse
+	var line_alpha: float = 0.12 + team_power * 0.72
+	var outer_line_alpha: float = clampf(line_alpha * 0.58, 0.0, 1.0)
+	var fill_alpha: float = 0.02 + team_power * 0.1
+	var width: float = 1.8 + team_power * 5.0
+
+	draw_circle(team_power_center, r, Color(0.78, 0.95, 1.0, fill_alpha))
+	draw_arc(team_power_center, r, 0.0, TAU, 56, Color(0.92, 0.98, 1.0, outer_line_alpha), width)
+	draw_arc(team_power_center, r * 0.72, 0.0, TAU, 48, Color(0.52, 0.86, 1.0, 0.07 + team_power * 0.26), 1.2 + team_power * 2.1)
+
+	var spark_count: int = 10
+	for i in range(spark_count):
+		var phase: float = TAU * float(i) / float(spark_count)
+		var wobble: float = sin(float(Time.get_ticks_msec()) * 0.005 + float(i) * 1.2)
+		var sr: float = r + wobble * (3.0 + team_power * 6.0)
+		var angle: float = phase + float(Time.get_ticks_msec()) * 0.00055 * (1.0 + team_power)
+		var p: Vector2 = team_power_center + Vector2.RIGHT.rotated(angle) * sr
+		draw_circle(p, 1.2 + team_power * 1.3, Color(0.94, 0.98, 1.0, 0.06 + team_power * 0.24))
+
+func _draw_kill_flashes() -> void:
+	for flash: Dictionary in kill_flashes:
+		var time_left: float = float(flash.get("time", 0.0))
+		var max_time: float = maxf(float(flash.get("max_time", KILL_FLASH_DURATION)), 0.01)
+		var t: float = clampf(time_left / max_time, 0.0, 1.0)
+		var p_variant: Variant = flash.get("position", Vector2.ZERO)
+		var pos: Vector2 = Vector2.ZERO
+		if p_variant is Vector2:
+			pos = p_variant
+		var radius: float = float(flash.get("radius", 24.0))
+		var draw_radius: float = radius * (0.62 + (1.0 - t) * 1.2)
+		draw_circle(pos, draw_radius, Color(1.0, 0.93, 0.72, 0.2 * t))
+		draw_arc(pos, draw_radius + 5.0, 0.0, TAU, 30, Color(1.0, 0.88, 0.6, 0.58 * t), 2.0 + 2.6 * t)

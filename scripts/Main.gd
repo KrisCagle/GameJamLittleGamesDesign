@@ -47,6 +47,11 @@ const HERO_CARD_TANK_SHEET := "res://assets/heroes/tank_idle.png"
 const HERO_CARD_RANGER_SHEET := "res://assets/heroes/ranger_idle.png"
 const HERO_CARD_ROGUE_SHEET := "res://assets/heroes/rogue_idle.png"
 const START_MENU_TITLE_FONT_PATH := "res://assets/fonts/Starstruck.ttf"
+const UI_HUD_FONT_PATH := "res://assets/fonts/Mokgech-Regular.otf"
+const UI_HUD_FONT_ALT_PATH := "res://assets/fonts/Mokgech-Italic.otf"
+const UI_TEXT_COLOR := Color(0.9, 0.24, 0.28, 1.0)
+const UI_OUTLINE_COLOR := Color(0.07, 0.0, 0.01, 0.96)
+const UI_SHADOW_COLOR := Color(0.0, 0.0, 0.0, 0.9)
 const FLOOR_TEXTURE_PATH := "res://assets/floor/floor_tileset12.png"
 const FLOOR_TEXTURE_CENTER_COVERAGE := 0.9
 const FLOOR_TEXTURE_WEB_COVERAGE_MULT := 0.52
@@ -83,11 +88,20 @@ const TEAM_LINK_MAX_ALPHA := 0.26
 const TEAM_CIRCLE_BASE_RADIUS := 116.0
 const TEAM_CIRCLE_MAX_RADIUS := 178.0
 const KILL_FLASH_DURATION := 0.24
+const PERFECT_POSITION_RING_RADIUS := 92.0
+const PERFECT_POSITION_FEEDBACK_DURATION := 0.92
+const PERFECT_POSITION_KILL_FLASH_MULT := 1.34
+const PERFECT_POSITION_HIT_FEEDBACK_MULT := 1.3
+const PERFECT_POSITION_HIT_SHAKE_BONUS := 0.22
+const PERFECT_POSITION_IMPACT_FLASH_INTERVAL := 0.05
+const PERFECT_POSITION_IMPACT_FLASH_INTENSITY := 1.08
+const PERFECT_POSITION_SOUND_COOLDOWN := 0.7
 const SPECTRAL_HALO_SPEED := 356.0
 const SPECTRAL_HALO_RADIUS := 14.0
 const SPECTRAL_HALO_CONTACT_DAMAGE := 10.5
 const SPECTRAL_HALO_HIT_COOLDOWN := 0.14
 const ENABLE_SFX := false
+const PERFECT_POSITION_SOUND_ENABLED := true
 const SFX_MIX_RATE := 32000.0
 const SFX_BUFFER_LENGTH := 0.16
 const SFX_MIN_INTERVAL := 0.035
@@ -150,6 +164,7 @@ var knight_pull_radius: float = 220.0
 var knight_guard_heal_per_sec: float = 4.0
 var start_card_frames: Dictionary = {}
 var start_menu_title_font: Font = null
+var hud_font: Font = null
 var lighting_root: Node2D = null
 var light_texture_soft: Texture2D = null
 var light_texture_wide: Texture2D = null
@@ -172,6 +187,10 @@ var team_power: float = 0.0
 var team_power_center: Vector2 = Vector2.ZERO
 var team_power_radius: float = TEAM_CIRCLE_BASE_RADIUS
 var kill_flashes: Array[Dictionary] = []
+var perfect_position_active: bool = false
+var perfect_position_feedback_timer: float = 0.0
+var perfect_position_impact_flash_timer: float = 0.0
+var perfect_position_sound_cooldown_timer: float = 0.0
 var spectral_halo_unlocked: bool = false
 var spectral_halo_position: Vector2 = Vector2.ZERO
 var spectral_halo_velocity: Vector2 = Vector2.ZERO
@@ -201,6 +220,10 @@ func _ready() -> void:
 	_spawn_heroes()
 	_load_start_card_textures()
 	start_menu_title_font = load(START_MENU_TITLE_FONT_PATH) as Font
+	hud_font = load(UI_HUD_FONT_PATH) as Font
+	if hud_font == null:
+		hud_font = load(UI_HUD_FONT_ALT_PATH) as Font
+	_configure_hud_style()
 	floor_texture = load(FLOOR_TEXTURE_PATH) as Texture2D
 	_setup_audio_sfx()
 	low_spec_mode = WEB_LOW_SPEC_ENABLED and OS.has_feature("web")
@@ -216,6 +239,10 @@ func _ready() -> void:
 	spectral_halo_position = arena_rect.get_center()
 	spectral_halo_velocity = Vector2.ZERO
 	spectral_halo_hit_timer = 0.0
+	perfect_position_active = false
+	perfect_position_feedback_timer = 0.0
+	perfect_position_impact_flash_timer = 0.0
+	perfect_position_sound_cooldown_timer = 0.0
 	_sync_halo_state()
 	world_camera.position = arena_rect.get_center()
 	world_camera.zoom = CAMERA_ZOOM_MENU
@@ -226,8 +253,34 @@ func _ready() -> void:
 	set_process(true)
 	queue_redraw()
 
+func _make_hud_label_settings(font_size: int) -> LabelSettings:
+	var settings: LabelSettings = LabelSettings.new()
+	if hud_font != null:
+		settings.font = hud_font
+	settings.font_size = font_size
+	settings.font_color = UI_TEXT_COLOR
+	settings.outline_size = 2
+	settings.outline_color = UI_OUTLINE_COLOR
+	settings.shadow_size = 2
+	settings.shadow_color = UI_SHADOW_COLOR
+	settings.shadow_offset = Vector2(2.0, 2.0)
+	return settings
+
+func _configure_hud_style() -> void:
+	wave_label.label_settings = _make_hud_label_settings(32)
+	threat_label.label_settings = _make_hud_label_settings(30)
+	hero_status.label_settings = _make_hud_label_settings(34)
+	hint_label.label_settings = _make_hud_label_settings(22)
+
+	wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hero_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
 func _process(delta: float) -> void:
 	sfx_cooldown_timer = maxf(0.0, sfx_cooldown_timer - delta)
+	perfect_position_impact_flash_timer = maxf(0.0, perfect_position_impact_flash_timer - delta)
+	perfect_position_sound_cooldown_timer = maxf(0.0, perfect_position_sound_cooldown_timer - delta)
 
 	if start_selection_active:
 		_update_kill_flashes(delta)
@@ -277,6 +330,7 @@ func _process(delta: float) -> void:
 	_check_for_game_over()
 	_progress_wave_timing(delta)
 	_update_team_power(delta)
+	_update_perfect_position_state(delta)
 	_update_kill_flashes(delta)
 	_update_dynamic_lighting(delta)
 	_update_camera(delta)
@@ -943,17 +997,20 @@ func _cleanup_dead_enemies() -> void:
 	for i in range(enemies.size() - 1, -1, -1):
 		if enemies[i].health <= 0.0:
 			var dead_enemy: Enemy = enemies[i]
-			_spawn_kill_flash(dead_enemy.global_position, dead_enemy.body_radius)
-			_add_camera_shake(0.2 + team_power * 0.45)
+			var kill_mult: float = PERFECT_POSITION_KILL_FLASH_MULT if perfect_position_active else 1.0
+			_spawn_kill_flash(dead_enemy.global_position, dead_enemy.body_radius, kill_mult)
+			_add_camera_shake(0.2 + team_power * 0.45 + (PERFECT_POSITION_HIT_SHAKE_BONUS if perfect_position_active else 0.0))
 			enemies[i].queue_free()
 			enemies.remove_at(i)
 
-func _spawn_kill_flash(position: Vector2, body_radius: float) -> void:
+func _spawn_kill_flash(position: Vector2, body_radius: float, intensity: float = 1.0) -> void:
+	var clamped_intensity: float = clampf(intensity, 0.7, 2.2)
+	var duration: float = KILL_FLASH_DURATION * lerpf(0.9, 1.35, clampf(clamped_intensity - 1.0, 0.0, 1.0))
 	var flash: Dictionary = {
 		"position": position,
-		"time": KILL_FLASH_DURATION,
-		"max_time": KILL_FLASH_DURATION,
-		"radius": maxf(16.0, body_radius * 2.5)
+		"time": duration,
+		"max_time": duration,
+		"radius": maxf(16.0, body_radius * 2.5) * clamped_intensity
 	}
 	kill_flashes.append(flash)
 
@@ -1004,6 +1061,34 @@ func _update_team_power(delta: float) -> void:
 		var regen_value: float = TEAM_POWER_REGEN_PER_SEC * regen_t * delta
 		for hero: Hero in alive:
 			hero.heal(regen_value)
+
+func _update_perfect_position_state(delta: float) -> void:
+	perfect_position_feedback_timer = maxf(0.0, perfect_position_feedback_timer - delta)
+	var alive: Array[Hero] = []
+	for hero: Hero in heroes:
+		if hero.health > 0.0:
+			alive.append(hero)
+
+	var all_inside_inner_ring: bool = not alive.is_empty()
+	var inner_radius_sq: float = PERFECT_POSITION_RING_RADIUS * PERFECT_POSITION_RING_RADIUS
+	for hero: Hero in alive:
+		if hero.global_position.distance_squared_to(team_power_center) > inner_radius_sq:
+			all_inside_inner_ring = false
+			break
+
+	var entering: bool = all_inside_inner_ring and not perfect_position_active
+	perfect_position_active = all_inside_inner_ring
+	if not perfect_position_active:
+		perfect_position_feedback_timer = 0.0
+		return
+
+	if entering:
+		perfect_position_feedback_timer = PERFECT_POSITION_FEEDBACK_DURATION
+		_spawn_kill_flash(team_power_center, 26.0, 1.35)
+		_add_camera_shake(0.48)
+		if perfect_position_sound_cooldown_timer <= 0.0:
+			_play_perfect_position_sfx()
+			perfect_position_sound_cooldown_timer = PERFECT_POSITION_SOUND_COOLDOWN
 
 func _spawn_projectiles_from_queue() -> void:
 	if projectile_spawns.is_empty():
@@ -1353,7 +1438,7 @@ func _add_camera_shake(amount: float) -> void:
 	camera_shake_timer = maxf(camera_shake_timer, CAMERA_SHAKE_DURATION)
 
 func _setup_audio_sfx() -> void:
-	if not ENABLE_SFX:
+	if not ENABLE_SFX and not PERFECT_POSITION_SOUND_ENABLED:
 		return
 	sfx_player = AudioStreamPlayer.new()
 	sfx_player.name = "SFXPlayer"
@@ -1362,7 +1447,7 @@ func _setup_audio_sfx() -> void:
 	generator.mix_rate = SFX_MIX_RATE
 	generator.buffer_length = SFX_BUFFER_LENGTH
 	sfx_player.stream = generator
-	sfx_player.volume_db = -12.0
+	sfx_player.volume_db = -6.0
 	sfx_player.play()
 	sfx_playback = sfx_player.get_stream_playback() as AudioStreamGeneratorPlayback
 
@@ -1387,8 +1472,19 @@ func _play_switch_sfx() -> void:
 		return
 	_push_sfx_tone(420.0, 0.055, 0.17)
 
-func _push_sfx_tone(freq: float, duration: float, amp: float) -> void:
-	if not ENABLE_SFX:
+func _play_perfect_position_sfx() -> void:
+	if not PERFECT_POSITION_SOUND_ENABLED:
+		return
+	if sfx_player != null and not sfx_player.playing:
+		sfx_player.play()
+		sfx_playback = sfx_player.get_stream_playback() as AudioStreamGeneratorPlayback
+	if sfx_playback == null:
+		return
+	_push_sfx_tone(368.0, 0.11, 0.24, true)
+	_push_sfx_tone(548.0, 0.085, 0.16, true)
+
+func _push_sfx_tone(freq: float, duration: float, amp: float, allow_when_sfx_disabled: bool = false) -> void:
+	if not ENABLE_SFX and not allow_when_sfx_disabled:
 		return
 	if sfx_playback == null and sfx_player != null:
 		sfx_playback = sfx_player.get_stream_playback() as AudioStreamGeneratorPlayback
@@ -1410,11 +1506,15 @@ func _push_sfx_tone(freq: float, duration: float, amp: float) -> void:
 		phase += phase_inc
 		phase_h += phase_inc_h
 
-func _on_enemy_impact(_position: Vector2, intensity: float) -> void:
+func _on_enemy_impact(position: Vector2, intensity: float) -> void:
 	if start_selection_active:
 		return
-	_add_camera_shake(0.55 + intensity * 0.75)
-	_play_hit_sfx(true, intensity)
+	var feedback_mult: float = PERFECT_POSITION_HIT_FEEDBACK_MULT if perfect_position_active else 1.0
+	_add_camera_shake((0.55 + intensity * 0.75) * feedback_mult)
+	_play_hit_sfx(true, intensity * feedback_mult)
+	if perfect_position_active and perfect_position_impact_flash_timer <= 0.0:
+		_spawn_kill_flash(position, 8.0 + intensity * 6.0, PERFECT_POSITION_IMPACT_FLASH_INTENSITY)
+		perfect_position_impact_flash_timer = PERFECT_POSITION_IMPACT_FLASH_INTERVAL
 
 func _on_hero_impact(_position: Vector2, intensity: float) -> void:
 	if start_selection_active:
@@ -1644,9 +1744,14 @@ func _upgrade_description(upgrade_id: int) -> String:
 
 func _update_ui() -> void:
 	var view_size: Vector2 = _viewport_size()
-	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	hint_label.size = Vector2(maxf(320.0, view_size.x - 20.0), hint_label.size.y)
-	hint_label.position = Vector2(10.0, view_size.y - 36.0)
+	threat_label.position = Vector2(16.0, 12.0)
+	threat_label.size = Vector2(520.0, 42.0)
+	hint_label.position = Vector2(16.0, 48.0)
+	hint_label.size = Vector2(760.0, 34.0)
+	hero_status.position = Vector2(view_size.x * 0.5 - 180.0, 14.0)
+	hero_status.size = Vector2(360.0, 44.0)
+	wave_label.position = Vector2(view_size.x - 260.0, view_size.y - 56.0)
+	wave_label.size = Vector2(240.0, 42.0)
 
 	if start_selection_active:
 		wave_label.text = ""
@@ -1655,79 +1760,33 @@ func _update_ui() -> void:
 		hint_label.text = ""
 		return
 
-	wave_label.text = "Wave %d  |  Time %.1fs  |  Upgrades %d" % [wave, elapsed_time, upgrades_taken]
+	hero_status.text = "TIME  %.1fs" % [elapsed_time]
+	wave_label.text = "WAVE %d" % [wave]
 
-	var swarm_count: int = 0
-	var ranged_count: int = 0
-	var elite_count: int = 0
-	var boss_count: int = 0
-	for enemy: Enemy in enemies:
-		if enemy.health <= 0.0:
-			continue
-		match enemy.kind:
-			ENEMY_SWARM:
-				swarm_count += 1
-			ENEMY_RANGED:
-				ranged_count += 1
-			ENEMY_ELITE:
-				elite_count += 1
-			ENEMY_BOSS:
-				boss_count += 1
-
-	threat_label.text = "Enemies %d  |  Swarm %d  Ranged %d  Elite %d  Boss %d  |  Shots %d" % [enemies.size(), swarm_count, ranged_count, elite_count, boss_count, projectiles.size()]
 	var halo_pct: float = clampf((halo_charge / maxf(halo_charge_cap, 0.01)) * 100.0, 0.0, 999.0)
-	threat_label.text += "  |  Halo %.0f%%" % [halo_pct]
-	threat_label.text += "  |  Power %d%%" % int(round(team_power * 100.0))
-	if spectral_halo_unlocked:
-		threat_label.text += "  |  Specter ACTIVE"
+	threat_label.text = "Halo  %.0f%%" % [halo_pct]
 	if halo_equipped:
-		threat_label.text += " ACTIVE"
+		threat_label.text += "  ACTIVE"
+
+	var status_line: String = ""
+	if halo_equipped:
+		status_line = ""
 	else:
 		if halo_recharge_delay_timer > 0.0:
-			threat_label.text += " DROPPED (Recharge in %.1fs)" % [halo_recharge_delay_timer]
-		else:
-			threat_label.text += " RECHARGING"
-
-	var lines: Array[String] = []
-	for i in range(heroes.size()):
-		var hero: Hero = heroes[i]
-		var tags: Array[String] = []
-		if i == halo_index:
-			if hero.has_halo:
-				tags.append("HALO")
-			elif not halo_equipped:
-				tags.append("OFF")
-		if hero.is_player_controlled:
-			tags.append("CTRL")
-		var hp_text: String = "DOWN" if hero.health <= 0.0 else "%d/%d" % [int(round(hero.health)), int(round(hero.max_health))]
-		var tag_text: String = ""
-		if not tags.is_empty():
-			tag_text = "(%s)" % ["/".join(tags)]
-		lines.append("[%d] %s  %s %s" % [i + 1, hero.hero_name, hp_text, tag_text])
-
-	if upgrade_phase_active:
-		lines.append("")
-		lines.append("Choose One Upgrade (Mouse Click Only)")
-
-	hero_status.text = "\n".join(lines)
-
-	if game_over:
-		hint_label.text = "All heroes are down. Press R or Enter to restart."
-	elif upgrade_phase_active:
-		hint_label.text = "Upgrade pause: click one of the three cards to continue."
-	elif not halo_equipped:
-		if halo_recharge_delay_timer > 0.0:
-			hint_label.text = "Halo dropped. Recharge starts in %.1fs." % [halo_recharge_delay_timer]
+			status_line = "Recharging."
 		elif halo_charge < halo_min_activate_charge_value:
-			hint_label.text = "Halo recharging... need %.0f%% to re-equip (SPACE)." % [halo_min_activate_charge_value]
+			status_line = "Recharging. Need %.0f%% to reactivate." % [halo_min_activate_charge_value]
 		elif halo_index < 0:
-			hint_label.text = "Pick a hero with 1/2/3 or click. Then press SPACE or double-click to activate Halo."
+			status_line = "Ready. Choose a hero, then activate Halo."
 		else:
-			hint_label.text = "Controlling selected hero without Halo. Press SPACE or double-click to activate."
+			status_line = "Ready."
+	if game_over:
+		status_line = "All heroes are down. Press R or Enter to restart."
+	elif upgrade_phase_active:
+		status_line = "Choose one upgrade to continue."
 	elif waiting_for_next_wave:
-		hint_label.text = "Wave clear. Next wave in %.1f seconds." % [maxf(intermission_timer, 0.0)]
-	else:
-		hint_label.text = "WASD/Arrows move halo hero. Switch with 1/2/3 or click. SPACE or double-click drops halo."
+		status_line = "Wave clear. Next wave in %.1fs." % [maxf(intermission_timer, 0.0)]
+	hint_label.text = status_line
 
 func _get_player_move_input() -> Vector2:
 	var x: float = 0.0
@@ -2184,7 +2243,7 @@ func _draw() -> void:
 		draw_circle(halo_switch_feedback_to, 12.0 + (1.0 - t) * 16.0, Color(1.0, 0.96, 0.58, 0.25 * t))
 
 	var view_size: Vector2 = _viewport_size()
-	var bar_rect_screen: Rect2 = Rect2(Vector2(view_size.x * 0.5 - 160.0, 14.0), Vector2(320.0, 14.0))
+	var bar_rect_screen: Rect2 = Rect2(Vector2(view_size.x * 0.5 - 160.0, 58.0), Vector2(320.0, 14.0))
 	var bar_rect: Rect2 = _screen_rect_to_world(bar_rect_screen)
 	draw_rect(bar_rect, Color(0.04, 0.06, 0.08, 0.9), true)
 	var fill_ratio: float = clampf(halo_charge / maxf(halo_charge_cap, 0.01), 0.0, 1.0)
@@ -2250,10 +2309,18 @@ func _draw_team_links() -> void:
 			if dist > TEAM_LINK_MAX_DISTANCE:
 				continue
 			var closeness: float = 1.0 - dist / TEAM_LINK_MAX_DISTANCE
-			var alpha: float = TEAM_LINK_MAX_ALPHA * closeness * team_power
-			var width: float = 1.0 + 2.4 * closeness * team_power
+			var perfect_link_mult: float = 1.3 if perfect_position_active else 1.0
+			var alpha: float = TEAM_LINK_MAX_ALPHA * closeness * team_power * perfect_link_mult
+			var width: float = 1.0 + 2.4 * closeness * team_power * perfect_link_mult
 			draw_line(a, b, Color(0.68, 0.95, 1.0, alpha), width, true)
-			draw_circle(a.lerp(b, 0.5), 1.2 + 1.1 * closeness, Color(0.9, 0.98, 1.0, alpha * 0.9))
+			draw_circle(a.lerp(b, 0.5), 1.2 + 1.1 * closeness * perfect_link_mult, Color(0.9, 0.98, 1.0, alpha * 0.9))
+
+	if perfect_position_active:
+		var glow_pulse: float = 0.7 + 0.3 * sin(float(Time.get_ticks_msec()) * 0.006)
+		for hero: Hero in alive:
+			var glow_radius: float = hero.body_radius + 12.0 + glow_pulse * 4.0
+			draw_circle(hero.global_position, glow_radius, Color(0.74, 0.95, 1.0, 0.045 + glow_pulse * 0.025))
+			draw_arc(hero.global_position, glow_radius + 2.5, 0.0, TAU, 36, Color(0.95, 0.99, 1.0, 0.2 + glow_pulse * 0.12), 1.2)
 
 func _draw_power_circle() -> void:
 	if team_power_center == Vector2.ZERO:
@@ -2264,10 +2331,25 @@ func _draw_power_circle() -> void:
 	var outer_line_alpha: float = clampf(line_alpha * 0.58, 0.0, 1.0)
 	var fill_alpha: float = 0.02 + team_power * 0.1
 	var width: float = 1.8 + team_power * 5.0
+	if perfect_position_active:
+		var perfect_breathe: float = 1.0 + sin(float(Time.get_ticks_msec()) * 0.0044) * 0.09
+		r *= perfect_breathe
+		width *= 1.34
+		fill_alpha = minf(0.34, fill_alpha + 0.11)
+		outer_line_alpha = minf(0.98, outer_line_alpha + 0.26)
+	if perfect_position_feedback_timer > 0.0:
+		var cue_t: float = perfect_position_feedback_timer / PERFECT_POSITION_FEEDBACK_DURATION
+		draw_arc(team_power_center, r + (1.0 - cue_t) * 26.0, 0.0, TAU, 64, Color(1.0, 0.96, 0.72, 0.55 * cue_t), 3.6 * cue_t + 1.2)
+		draw_circle(team_power_center, r * 0.52 + (1.0 - cue_t) * 16.0, Color(1.0, 0.94, 0.66, 0.14 * cue_t))
 
 	draw_circle(team_power_center, r, Color(0.78, 0.95, 1.0, fill_alpha))
 	draw_arc(team_power_center, r, 0.0, TAU, 56, Color(0.92, 0.98, 1.0, outer_line_alpha), width)
-	draw_arc(team_power_center, r * 0.72, 0.0, TAU, 48, Color(0.52, 0.86, 1.0, 0.07 + team_power * 0.26), 1.2 + team_power * 2.1)
+	var inner_alpha: float = 0.14 + team_power * 0.18
+	var inner_width: float = 1.5 + team_power * 1.8
+	if perfect_position_active:
+		inner_alpha = minf(0.82, inner_alpha + 0.28)
+		inner_width += 1.2
+	draw_arc(team_power_center, PERFECT_POSITION_RING_RADIUS, 0.0, TAU, 52, Color(0.72, 0.92, 1.0, inner_alpha), inner_width)
 
 	var spark_count: int = 10
 	for i in range(spark_count):
@@ -2289,8 +2371,18 @@ func _draw_kill_flashes() -> void:
 			pos = p_variant
 		var radius: float = float(flash.get("radius", 24.0))
 		var draw_radius: float = radius * (0.62 + (1.0 - t) * 1.2)
-		draw_circle(pos, draw_radius, Color(1.0, 0.93, 0.72, 0.2 * t))
-		draw_arc(pos, draw_radius + 5.0, 0.0, TAU, 30, Color(1.0, 0.88, 0.6, 0.58 * t), 2.0 + 2.6 * t)
+		var spike_count: int = 8
+		var spin: float = float(Time.get_ticks_msec()) * 0.0018
+		for i in range(spike_count):
+			var angle: float = spin + TAU * float(i) / float(spike_count)
+			var dir: Vector2 = Vector2.RIGHT.rotated(angle)
+			var inner_len: float = draw_radius * 0.2
+			var outer_len: float = draw_radius * (0.66 + (1.0 - t) * 0.42)
+			var p0: Vector2 = pos + dir * inner_len
+			var p1: Vector2 = pos + dir * outer_len
+			draw_line(p0, p1, Color(1.0, 0.9, 0.64, 0.82 * t), 2.0 + 1.8 * t, true)
+		draw_line(pos + Vector2(-draw_radius * 0.22, 0.0), pos + Vector2(draw_radius * 0.22, 0.0), Color(1.0, 0.95, 0.78, 0.88 * t), 2.2, true)
+		draw_line(pos + Vector2(0.0, -draw_radius * 0.22), pos + Vector2(0.0, draw_radius * 0.22), Color(1.0, 0.95, 0.78, 0.88 * t), 2.2, true)
 
 func _draw_spectral_halo() -> void:
 	if not spectral_halo_unlocked:

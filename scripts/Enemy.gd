@@ -133,6 +133,7 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 
 	attack_timer = maxf(0.0, attack_timer - delta)
 	hit_flash_timer = maxf(0.0, hit_flash_timer - delta)
+	_update_sprite_flash()
 	knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 360.0 * delta)
 	target_refresh_timer -= delta
 	if target_refresh_timer <= 0.0:
@@ -257,6 +258,17 @@ func _play_ranged_attack_anim() -> void:
 	if ranged_sprite == null:
 		return
 	ranged_sprite.play(RANGED_ANIM_ATTACK)
+
+func _update_sprite_flash() -> void:
+	var flash_t: float = 0.0
+	if ENEMY_HIT_FLASH_DURATION > 0.0:
+		flash_t = clampf(hit_flash_timer / ENEMY_HIT_FLASH_DURATION, 0.0, 1.0)
+	var flash_strength: float = flash_t * clampf(0.35 + hit_flash_strength * 0.6, 0.0, 1.0)
+	var flash_mod: Color = Color(1.0 + flash_strength * 0.55, 1.0 + flash_strength * 0.36, 1.0 + flash_strength * 0.24, 1.0)
+	if swarm_sprite != null:
+		swarm_sprite.modulate = flash_mod
+	if ranged_sprite != null:
+		ranged_sprite.modulate = flash_mod
 
 func _update_elite_window(delta: float) -> void:
 	if kind != EnemyKind.ELITE:
@@ -537,7 +549,6 @@ func _draw() -> void:
 		var flash_t: float = hit_flash_timer / ENEMY_HIT_FLASH_DURATION
 		var flash_gain: float = clampf(0.42 + hit_flash_strength * 0.45, 0.0, 0.95)
 		draw_color = draw_color.lerp(Color(1.0, 0.96, 0.9), flash_gain * flash_t)
-		draw_circle(Vector2.ZERO, body_radius + 3.0 + hit_flash_strength * 2.0, Color(1.0, 0.94, 0.72, 0.12 * flash_t * (1.0 + hit_flash_strength)))
 
 	var draw_sprite_body: bool = true
 	if kind == EnemyKind.SWARM and swarm_sprite != null and swarm_sprite.visible:

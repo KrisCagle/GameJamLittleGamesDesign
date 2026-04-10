@@ -85,11 +85,8 @@ const TEAM_CIRCLE_MAX_RADIUS := 178.0
 const KILL_FLASH_DURATION := 0.24
 const SPECTRAL_HALO_SPEED := 356.0
 const SPECTRAL_HALO_RADIUS := 14.0
-const SPECTRAL_HALO_FIRE_COOLDOWN := 0.34
-const SPECTRAL_HALO_TARGET_RANGE := 520.0
-const SPECTRAL_HALO_PROJECTILE_SPEED := 620.0
-const SPECTRAL_HALO_PROJECTILE_DAMAGE := 8.2
-const SPECTRAL_HALO_PROJECTILE_RADIUS := 6.0
+const SPECTRAL_HALO_CONTACT_DAMAGE := 10.5
+const SPECTRAL_HALO_HIT_COOLDOWN := 0.14
 const ENABLE_SFX := false
 const SFX_MIX_RATE := 32000.0
 const SFX_BUFFER_LENGTH := 0.16
@@ -178,7 +175,7 @@ var kill_flashes: Array[Dictionary] = []
 var spectral_halo_unlocked: bool = false
 var spectral_halo_position: Vector2 = Vector2.ZERO
 var spectral_halo_velocity: Vector2 = Vector2.ZERO
-var spectral_halo_fire_timer: float = 0.0
+var spectral_halo_hit_timer: float = 0.0
 var sfx_player: AudioStreamPlayer = null
 var sfx_playback: AudioStreamGeneratorPlayback = null
 var sfx_cooldown_timer: float = 0.0
@@ -218,7 +215,7 @@ func _ready() -> void:
 	spectral_halo_unlocked = false
 	spectral_halo_position = arena_rect.get_center()
 	spectral_halo_velocity = Vector2.ZERO
-	spectral_halo_fire_timer = 0.0
+	spectral_halo_hit_timer = 0.0
 	_sync_halo_state()
 	world_camera.position = arena_rect.get_center()
 	world_camera.zoom = CAMERA_ZOOM_MENU
@@ -1027,20 +1024,6 @@ func _spectral_halo_bounds() -> Rect2:
 		return intersection
 	return clamp_rect
 
-func _nearest_enemy_to_point(point: Vector2, max_distance: float = -1.0) -> Enemy:
-	var nearest: Enemy = null
-	var best_dist: float = INF
-	for enemy: Enemy in enemies:
-		if enemy.health <= 0.0:
-			continue
-		var d: float = point.distance_to(enemy.global_position)
-		if max_distance > 0.0 and d > max_distance:
-			continue
-		if d < best_dist:
-			best_dist = d
-			nearest = enemy
-	return nearest
-
 func _update_spectral_halo(delta: float) -> void:
 	if not spectral_halo_unlocked:
 		return
@@ -1075,26 +1058,22 @@ func _update_spectral_halo(delta: float) -> void:
 		spectral_halo_velocity = spectral_halo_velocity.normalized() * SPECTRAL_HALO_SPEED
 
 	spectral_halo_position = pos
-	spectral_halo_fire_timer = maxf(0.0, spectral_halo_fire_timer - delta)
+	spectral_halo_hit_timer = maxf(0.0, spectral_halo_hit_timer - delta)
+	if spectral_halo_hit_timer > 0.0:
+		return
 
-	if spectral_halo_fire_timer > 0.0:
-		return
-	var target: Enemy = _nearest_enemy_to_point(spectral_halo_position, SPECTRAL_HALO_TARGET_RANGE)
-	if target == null:
-		return
-	projectile_spawns.append({
-		"team": "hero",
-		"position": spectral_halo_position,
-		"target_position": target.global_position,
-		"damage": SPECTRAL_HALO_PROJECTILE_DAMAGE,
-		"speed": SPECTRAL_HALO_PROJECTILE_SPEED,
-		"radius": SPECTRAL_HALO_PROJECTILE_RADIUS,
-		"life": 2.0,
-		"color": Color(1.0, 0.94, 0.62),
-		"homing_target": target,
-		"homing_turn_rate": 7.0
-	})
-	spectral_halo_fire_timer = SPECTRAL_HALO_FIRE_COOLDOWN
+	for enemy: Enemy in enemies:
+		if enemy.health <= 0.0:
+			continue
+		var contact_dist: float = SPECTRAL_HALO_RADIUS + enemy.body_radius
+		if spectral_halo_position.distance_squared_to(enemy.global_position) > contact_dist * contact_dist:
+			continue
+		enemy.set_damage_source(spectral_halo_position)
+		var contact_damage: float = SPECTRAL_HALO_CONTACT_DAMAGE * (1.0 + team_power * 0.35)
+		enemy.take_damage(contact_damage)
+		spectral_halo_hit_timer = SPECTRAL_HALO_HIT_COOLDOWN
+		_add_camera_shake(0.14)
+		break
 
 func _update_projectiles(delta: float) -> void:
 	if projectiles.is_empty():
@@ -1590,7 +1569,7 @@ func _apply_upgrade(upgrade_id: int) -> void:
 			spectral_halo_unlocked = true
 			spectral_halo_position = _camera_target_position()
 			spectral_halo_velocity = Vector2.RIGHT.rotated(randf() * TAU) * SPECTRAL_HALO_SPEED
-			spectral_halo_fire_timer = 0.08
+			spectral_halo_hit_timer = 0.08
 
 	upgrade_levels[upgrade_id] = int(upgrade_levels.get(upgrade_id, 0)) + 1
 	upgrades_taken += 1

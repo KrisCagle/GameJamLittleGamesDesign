@@ -29,6 +29,7 @@ const UPGRADE_GOLDEN_SURGE := 10
 const UPGRADE_ROGUE_TWIN_FANGS := 11
 const UPGRADE_TANK_HEAVY_ATTACK := 12
 const UPGRADE_RANGER_TRIPLE_ARROWS := 13
+const UPGRADE_HALO_SPECTER := 14
 
 const WORLD_SIZE := Vector2(3200, 2200)
 const ARENA_MARGIN := 44.0
@@ -82,6 +83,13 @@ const TEAM_LINK_MAX_ALPHA := 0.26
 const TEAM_CIRCLE_BASE_RADIUS := 116.0
 const TEAM_CIRCLE_MAX_RADIUS := 178.0
 const KILL_FLASH_DURATION := 0.24
+const SPECTRAL_HALO_SPEED := 356.0
+const SPECTRAL_HALO_RADIUS := 14.0
+const SPECTRAL_HALO_FIRE_COOLDOWN := 0.34
+const SPECTRAL_HALO_TARGET_RANGE := 520.0
+const SPECTRAL_HALO_PROJECTILE_SPEED := 620.0
+const SPECTRAL_HALO_PROJECTILE_DAMAGE := 8.2
+const SPECTRAL_HALO_PROJECTILE_RADIUS := 6.0
 const ENABLE_SFX := false
 const SFX_MIX_RATE := 32000.0
 const SFX_BUFFER_LENGTH := 0.16
@@ -167,6 +175,10 @@ var team_power: float = 0.0
 var team_power_center: Vector2 = Vector2.ZERO
 var team_power_radius: float = TEAM_CIRCLE_BASE_RADIUS
 var kill_flashes: Array[Dictionary] = []
+var spectral_halo_unlocked: bool = false
+var spectral_halo_position: Vector2 = Vector2.ZERO
+var spectral_halo_velocity: Vector2 = Vector2.ZERO
+var spectral_halo_fire_timer: float = 0.0
 var sfx_player: AudioStreamPlayer = null
 var sfx_playback: AudioStreamGeneratorPlayback = null
 var sfx_cooldown_timer: float = 0.0
@@ -187,6 +199,7 @@ func _ready() -> void:
 	upgrade_levels[UPGRADE_ROGUE_TWIN_FANGS] = 0
 	upgrade_levels[UPGRADE_TANK_HEAVY_ATTACK] = 0
 	upgrade_levels[UPGRADE_RANGER_TRIPLE_ARROWS] = 0
+	upgrade_levels[UPGRADE_HALO_SPECTER] = 0
 
 	_spawn_heroes()
 	_load_start_card_textures()
@@ -202,6 +215,10 @@ func _ready() -> void:
 	halo_recharge_delay_timer = 0.0
 	halo_toggle_lock_timer = 0.0
 	halo_switch_feedback_timer = 0.0
+	spectral_halo_unlocked = false
+	spectral_halo_position = arena_rect.get_center()
+	spectral_halo_velocity = Vector2.ZERO
+	spectral_halo_fire_timer = 0.0
 	_sync_halo_state()
 	world_camera.position = arena_rect.get_center()
 	world_camera.zoom = CAMERA_ZOOM_MENU
@@ -253,6 +270,7 @@ func _process(delta: float) -> void:
 	_apply_halo_synergies(delta)
 	for enemy: Enemy in enemies:
 		enemy.process_tick(delta, heroes, arena_rect, projectile_spawns, summon_spawns)
+	_update_spectral_halo(delta)
 
 	_spawn_summoned_enemies_from_queue()
 	_spawn_projectiles_from_queue()
@@ -1000,6 +1018,84 @@ func _spawn_projectiles_from_queue() -> void:
 		projectiles.append(projectile)
 	projectile_spawns.clear()
 
+func _spectral_halo_bounds() -> Rect2:
+	var margin: float = SPECTRAL_HALO_RADIUS + 6.0
+	var view_rect: Rect2 = _viewport_rect_world().grow(-margin)
+	var clamp_rect: Rect2 = arena_rect.grow(-margin)
+	var intersection: Rect2 = clamp_rect.intersection(view_rect)
+	if intersection.size.x > 48.0 and intersection.size.y > 48.0:
+		return intersection
+	return clamp_rect
+
+func _nearest_enemy_to_point(point: Vector2, max_distance: float = -1.0) -> Enemy:
+	var nearest: Enemy = null
+	var best_dist: float = INF
+	for enemy: Enemy in enemies:
+		if enemy.health <= 0.0:
+			continue
+		var d: float = point.distance_to(enemy.global_position)
+		if max_distance > 0.0 and d > max_distance:
+			continue
+		if d < best_dist:
+			best_dist = d
+			nearest = enemy
+	return nearest
+
+func _update_spectral_halo(delta: float) -> void:
+	if not spectral_halo_unlocked:
+		return
+
+	if spectral_halo_velocity.length_squared() <= 0.0001:
+		spectral_halo_velocity = Vector2.RIGHT.rotated(randf() * TAU) * SPECTRAL_HALO_SPEED
+
+	var bounds: Rect2 = _spectral_halo_bounds()
+	var pos: Vector2 = spectral_halo_position + spectral_halo_velocity * delta
+	var bounced: bool = false
+	if pos.x < bounds.position.x:
+		pos.x = bounds.position.x
+		spectral_halo_velocity.x = absf(spectral_halo_velocity.x)
+		bounced = true
+	elif pos.x > bounds.end.x:
+		pos.x = bounds.end.x
+		spectral_halo_velocity.x = -absf(spectral_halo_velocity.x)
+		bounced = true
+	if pos.y < bounds.position.y:
+		pos.y = bounds.position.y
+		spectral_halo_velocity.y = absf(spectral_halo_velocity.y)
+		bounced = true
+	elif pos.y > bounds.end.y:
+		pos.y = bounds.end.y
+		spectral_halo_velocity.y = -absf(spectral_halo_velocity.y)
+		bounced = true
+	if bounced:
+		var bounce_jitter: float = randf_range(-0.16, 0.16)
+		spectral_halo_velocity = spectral_halo_velocity.rotated(bounce_jitter)
+		if spectral_halo_velocity.length_squared() <= 0.0001:
+			spectral_halo_velocity = Vector2.RIGHT.rotated(randf() * TAU)
+		spectral_halo_velocity = spectral_halo_velocity.normalized() * SPECTRAL_HALO_SPEED
+
+	spectral_halo_position = pos
+	spectral_halo_fire_timer = maxf(0.0, spectral_halo_fire_timer - delta)
+
+	if spectral_halo_fire_timer > 0.0:
+		return
+	var target: Enemy = _nearest_enemy_to_point(spectral_halo_position, SPECTRAL_HALO_TARGET_RANGE)
+	if target == null:
+		return
+	projectile_spawns.append({
+		"team": "hero",
+		"position": spectral_halo_position,
+		"target_position": target.global_position,
+		"damage": SPECTRAL_HALO_PROJECTILE_DAMAGE,
+		"speed": SPECTRAL_HALO_PROJECTILE_SPEED,
+		"radius": SPECTRAL_HALO_PROJECTILE_RADIUS,
+		"life": 2.0,
+		"color": Color(1.0, 0.94, 0.62),
+		"homing_target": target,
+		"homing_turn_rate": 7.0
+	})
+	spectral_halo_fire_timer = SPECTRAL_HALO_FIRE_COOLDOWN
+
 func _update_projectiles(delta: float) -> void:
 	if projectiles.is_empty():
 		return
@@ -1107,6 +1203,8 @@ func _has_alive_hero_kind(kind: int) -> bool:
 
 func _collect_attack_unlock_priority(tank_alive: bool, ranger_alive: bool, rogue_alive: bool) -> Array[int]:
 	var priority: Array[int] = []
+	if int(upgrade_levels.get(UPGRADE_HALO_SPECTER, 0)) <= 0:
+		priority.append(UPGRADE_HALO_SPECTER)
 	if tank_alive and int(upgrade_levels.get(UPGRADE_TANK_HEAVY_ATTACK, 0)) <= 0:
 		priority.append(UPGRADE_TANK_HEAVY_ATTACK)
 	if ranger_alive and int(upgrade_levels.get(UPGRADE_RANGER_TRIPLE_ARROWS, 0)) <= 0:
@@ -1126,6 +1224,8 @@ func _roll_upgrade_choices() -> Array[int]:
 	pool.append(UPGRADE_FIELD_PATCH)
 	pool.append(UPGRADE_HALO_RESERVOIR)
 	pool.append(UPGRADE_TEAM_TRAINING)
+	if int(upgrade_levels.get(UPGRADE_HALO_SPECTER, 0)) <= 0:
+		pool.append(UPGRADE_HALO_SPECTER)
 
 	if tank_alive:
 		pool.append(UPGRADE_TANK_BASTION)
@@ -1486,6 +1586,11 @@ func _apply_upgrade(upgrade_id: int) -> void:
 				if hero.kind == HERO_RANGER:
 					hero.ranger_triple_arrows_unlocked = true
 					hero.attack_cooldown = maxf(0.54, hero.attack_cooldown * 0.96)
+		UPGRADE_HALO_SPECTER:
+			spectral_halo_unlocked = true
+			spectral_halo_position = _camera_target_position()
+			spectral_halo_velocity = Vector2.RIGHT.rotated(randf() * TAU) * SPECTRAL_HALO_SPEED
+			spectral_halo_fire_timer = 0.08
 
 	upgrade_levels[upgrade_id] = int(upgrade_levels.get(upgrade_id, 0)) + 1
 	upgrades_taken += 1
@@ -1520,6 +1625,8 @@ func _upgrade_name(upgrade_id: int) -> String:
 			return "Heavy Attack"
 		UPGRADE_RANGER_TRIPLE_ARROWS:
 			return "Triple Arrows"
+		UPGRADE_HALO_SPECTER:
+			return "Spectral Halo"
 	return "Unknown"
 
 func _upgrade_description(upgrade_id: int) -> String:
@@ -1552,6 +1659,8 @@ func _upgrade_description(upgrade_id: int) -> String:
 			return "Unlock Tank charged slam: huge area strike that punishes swarms."
 		UPGRADE_RANGER_TRIPLE_ARROWS:
 			return "Unlock Ranger triple-shot: fires 3 arrows at once."
+		UPGRADE_HALO_SPECTER:
+			return "Summon a spectral halo that bounces around and auto-fires at enemies."
 	return ""
 
 func _update_ui() -> void:
@@ -1590,6 +1699,8 @@ func _update_ui() -> void:
 	var halo_pct: float = clampf((halo_charge / maxf(halo_charge_cap, 0.01)) * 100.0, 0.0, 999.0)
 	threat_label.text += "  |  Halo %.0f%%" % [halo_pct]
 	threat_label.text += "  |  Power %d%%" % int(round(team_power * 100.0))
+	if spectral_halo_unlocked:
+		threat_label.text += "  |  Specter ACTIVE"
 	if halo_equipped:
 		threat_label.text += " ACTIVE"
 	else:
@@ -2083,6 +2194,7 @@ func _draw() -> void:
 		return
 
 	_draw_world_backdrop(view_rect)
+	_draw_spectral_halo()
 	_draw_team_power_overlay()
 	_draw_readability_pass()
 
@@ -2200,3 +2312,14 @@ func _draw_kill_flashes() -> void:
 		var draw_radius: float = radius * (0.62 + (1.0 - t) * 1.2)
 		draw_circle(pos, draw_radius, Color(1.0, 0.93, 0.72, 0.2 * t))
 		draw_arc(pos, draw_radius + 5.0, 0.0, TAU, 30, Color(1.0, 0.88, 0.6, 0.58 * t), 2.0 + 2.6 * t)
+
+func _draw_spectral_halo() -> void:
+	if not spectral_halo_unlocked:
+		return
+	if start_selection_active:
+		return
+	var pulse: float = 1.0 + sin(float(Time.get_ticks_msec()) * 0.007) * 0.11
+	var r: float = SPECTRAL_HALO_RADIUS * pulse
+	draw_circle(spectral_halo_position, r + 5.0, Color(1.0, 0.94, 0.62, 0.14))
+	draw_circle(spectral_halo_position, r, Color(1.0, 0.93, 0.52, 0.24))
+	draw_arc(spectral_halo_position, r + 1.0, 0.0, TAU, 42, Color(1.0, 0.98, 0.72, 0.78), 2.2)

@@ -49,6 +49,7 @@ const START_MENU_TITLE_FONT_PATH := "res://assets/fonts/Starstruck.ttf"
 const FLOOR_TEXTURE_PATH := "res://assets/floor/floor_tileset12.png"
 const FLOOR_TEXTURE_CENTER_COVERAGE := 0.9
 const FLOOR_TEXTURE_WEB_COVERAGE_MULT := 0.52
+const FLOOR_TEXTURE_TILE_WORLD_SIZE := 420.0
 const FLOOR_TILE_SIZE := 104.0
 const FLOOR_PATTERN_PAD := 220.0
 const WALL_FRAME_THICKNESS := 34.0
@@ -1826,8 +1827,20 @@ func _draw_floor_pattern(view_rect: Rect2) -> void:
 		var tex_w: float = float(floor_texture.get_width())
 		var tex_h: float = float(floor_texture.get_height())
 		if tex_w > 0.0 and tex_h > 0.0:
-			# Draw this floor art once, centered, so the medallion appears only in the middle.
+			# Fill the arena with repeated floor tiles so walking always reveals more floor.
 			draw_rect(arena_rect, Color(0.06, 0.1, 0.14, 0.95), true)
+			var tile_size: float = FLOOR_TEXTURE_TILE_WORLD_SIZE
+			var start_x: float = floor((visible.position.x - arena_rect.position.x) / tile_size) * tile_size + arena_rect.position.x
+			var start_y: float = floor((visible.position.y - arena_rect.position.y) / tile_size) * tile_size + arena_rect.position.y
+			var end_x: float = minf(visible.end.x + tile_size, arena_rect.end.x + tile_size)
+			var end_y: float = minf(visible.end.y + tile_size, arena_rect.end.y + tile_size)
+			var src_rect_full: Rect2 = Rect2(Vector2.ZERO, Vector2(tex_w, tex_h))
+			for y in range(int(start_y), int(end_y), int(tile_size)):
+				for x in range(int(start_x), int(end_x), int(tile_size)):
+					var tile_rect: Rect2 = Rect2(Vector2(float(x), float(y)), Vector2(tile_size, tile_size))
+					draw_texture_rect_region(floor_texture, tile_rect, src_rect_full, Color(0.56, 0.66, 0.8, 0.42), false, true)
+
+			# Keep a stronger center medallion accent.
 			var coverage: float = FLOOR_TEXTURE_CENTER_COVERAGE
 			if OS.has_feature("web"):
 				coverage *= FLOOR_TEXTURE_WEB_COVERAGE_MULT
@@ -1842,8 +1855,7 @@ func _draw_floor_pattern(view_rect: Rect2) -> void:
 				arena_rect.get_center() - Vector2(draw_w * 0.5, draw_h * 0.5),
 				Vector2(draw_w, draw_h)
 			)
-			var src_rect: Rect2 = Rect2(Vector2.ZERO, Vector2(tex_w, tex_h))
-			draw_texture_rect_region(floor_texture, draw_rect_tex, src_rect, Color(0.76, 0.86, 1.0, 0.88), false, true)
+			draw_texture_rect_region(floor_texture, draw_rect_tex, src_rect_full, Color(0.8, 0.9, 1.0, 0.84), false, true)
 			draw_rect(arena_rect, Color(0.02, 0.04, 0.07, 0.14), true)
 			return
 

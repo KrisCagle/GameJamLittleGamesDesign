@@ -6,9 +6,11 @@ enum HeroKind { KNIGHT, RANGER, ROGUE }
 const HERO_ANIM_NAME := "idle"
 const HERO_SHEET_FRAME_COUNT := 8
 const KNIGHT_SPRITE_PATH := "res://assets/heroes/tank_idle.png"
+const KNIGHT_ATTACK_SPRITE_PATH := "res://assets/heroes/tank_attack_1.png"
 const RANGER_SPRITE_PATH := "res://assets/heroes/ranger_idle.png"
 const RANGER_ATTACK_SPRITE_PATH := "res://assets/heroes/ranger_attack_1.png"
 const ROGUE_SPRITE_PATH := "res://assets/heroes/rogue_idle.png"
+const ROGUE_ATTACK_SPRITE_PATH := "res://assets/heroes/rogue_attack_1.png"
 const HERO_SIZE_MULT := 1.5
 const HERO_UNIFORM_BASE_SCALE := Vector2(0.98, 0.98)
 const HERO_MOVE_SPEED_MULT := 0.94
@@ -16,6 +18,12 @@ const HERO_DAMAGE_MULT := 1.56
 const RANGER_ATTACK_ANIM_NAME := "attack"
 const RANGER_ATTACK_FRAME_COUNT := 5
 const RANGER_ATTACK_VISUAL_DURATION := 0.24
+const KNIGHT_ATTACK_ANIM_NAME := "attack"
+const KNIGHT_ATTACK_FRAME_COUNT := 8
+const KNIGHT_ATTACK_VISUAL_DURATION := 0.24
+const ROGUE_ATTACK_ANIM_NAME := "attack"
+const ROGUE_ATTACK_FRAME_COUNT := 4
+const ROGUE_ATTACK_VISUAL_DURATION := 0.2
 
 var kind: int = HeroKind.KNIGHT
 var hero_name: String = "Knight"
@@ -63,6 +71,8 @@ var ranger_heal_visual_radius: float = 0.0
 var ranger_heal_pulse_timer: float = 0.0
 var ranger_heal_pulse_phase: float = 0.0
 var ranger_attack_visual_timer: float = 0.0
+var knight_attack_visual_timer: float = 0.0
+var rogue_attack_visual_timer: float = 0.0
 var team_power: float = 0.0
 
 const ROGUE_ASSIST_TRIGGER_RATIO := 0.73
@@ -183,6 +193,8 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	ranger_heal_pulse_timer = 0.0
 	ranger_heal_pulse_phase = randf() * TAU
 	ranger_attack_visual_timer = 0.0
+	knight_attack_visual_timer = 0.0
+	rogue_attack_visual_timer = 0.0
 	team_power = 0.0
 	current_velocity = Vector2.ZERO
 	knockback_velocity = Vector2.ZERO
@@ -485,6 +497,11 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 		attack_timer = maxf(attack_cooldown * 0.36, TANK_HEAVY_CHARGE_TIME)
 		return
 
+	if kind == HeroKind.KNIGHT:
+		_trigger_knight_attack_visual()
+	elif kind == HeroKind.ROGUE:
+		_trigger_rogue_attack_visual()
+
 	var melee_reach: float = attack_range + body_radius + 4.0
 	var melee_half_angle: float = deg_to_rad(46.0)
 	var swing_color: Color = Color(1.0, 0.95, 0.7, 0.9)
@@ -550,6 +567,7 @@ func _execute_tank_heavy_attack(enemies: Array[Enemy]) -> void:
 	var to_target: Vector2 = tank_heavy_target_point - global_position
 	var attack_dir: Vector2 = to_target.normalized() if to_target.length_squared() > 0.0001 else Vector2.RIGHT
 	_set_facing_from_direction(attack_dir, ATTACK_FACING_LOCK_TIME)
+	_trigger_knight_attack_visual()
 	var heavy_reach: float = attack_range + body_radius + TANK_HEAVY_RADIUS_BONUS
 	var heavy_damage: float = attack_damage * TANK_HEAVY_DAMAGE_MULT
 	var hit_count: int = 0
@@ -923,6 +941,14 @@ func _ensure_hero_sprite() -> void:
 		var ranger_attack_texture: Texture2D = load(RANGER_ATTACK_SPRITE_PATH)
 		if ranger_attack_texture != null:
 			_append_sheet_animation(frames, ranger_attack_texture, RANGER_ATTACK_ANIM_NAME, RANGER_ATTACK_FRAME_COUNT, 13.0, false)
+	elif kind == HeroKind.KNIGHT:
+		var knight_attack_texture: Texture2D = load(KNIGHT_ATTACK_SPRITE_PATH)
+		if knight_attack_texture != null:
+			_append_sheet_animation(frames, knight_attack_texture, KNIGHT_ATTACK_ANIM_NAME, KNIGHT_ATTACK_FRAME_COUNT, 12.0, false)
+	elif kind == HeroKind.ROGUE:
+		var rogue_attack_texture: Texture2D = load(ROGUE_ATTACK_SPRITE_PATH)
+		if rogue_attack_texture != null:
+			_append_sheet_animation(frames, rogue_attack_texture, ROGUE_ATTACK_ANIM_NAME, ROGUE_ATTACK_FRAME_COUNT, 15.0, false)
 
 	hero_sprite = AnimatedSprite2D.new()
 	hero_sprite.name = "HeroSprite"
@@ -985,8 +1011,17 @@ func _sync_hero_sprite_visuals() -> void:
 	if hero_sprite == null:
 		return
 	var desired_anim: String = HERO_ANIM_NAME
-	if kind == HeroKind.RANGER and ranger_attack_visual_timer > 0.0 and hero_sprite.sprite_frames != null and hero_sprite.sprite_frames.has_animation(RANGER_ATTACK_ANIM_NAME):
-		desired_anim = RANGER_ATTACK_ANIM_NAME
+	if hero_sprite.sprite_frames != null:
+		match kind:
+			HeroKind.RANGER:
+				if ranger_attack_visual_timer > 0.0 and hero_sprite.sprite_frames.has_animation(RANGER_ATTACK_ANIM_NAME):
+					desired_anim = RANGER_ATTACK_ANIM_NAME
+			HeroKind.KNIGHT:
+				if knight_attack_visual_timer > 0.0 and hero_sprite.sprite_frames.has_animation(KNIGHT_ATTACK_ANIM_NAME):
+					desired_anim = KNIGHT_ATTACK_ANIM_NAME
+			HeroKind.ROGUE:
+				if rogue_attack_visual_timer > 0.0 and hero_sprite.sprite_frames.has_animation(ROGUE_ATTACK_ANIM_NAME):
+					desired_anim = ROGUE_ATTACK_ANIM_NAME
 	if hero_sprite.animation != desired_anim:
 		hero_sprite.play(desired_anim)
 	elif not hero_sprite.is_playing():
@@ -1004,6 +1039,20 @@ func _trigger_ranger_attack_visual() -> void:
 	ranger_attack_visual_timer = RANGER_ATTACK_VISUAL_DURATION
 	if hero_sprite != null and hero_sprite.sprite_frames != null and hero_sprite.sprite_frames.has_animation(RANGER_ATTACK_ANIM_NAME):
 		hero_sprite.play(RANGER_ATTACK_ANIM_NAME)
+
+func _trigger_knight_attack_visual() -> void:
+	if kind != HeroKind.KNIGHT:
+		return
+	knight_attack_visual_timer = KNIGHT_ATTACK_VISUAL_DURATION
+	if hero_sprite != null and hero_sprite.sprite_frames != null and hero_sprite.sprite_frames.has_animation(KNIGHT_ATTACK_ANIM_NAME):
+		hero_sprite.play(KNIGHT_ATTACK_ANIM_NAME)
+
+func _trigger_rogue_attack_visual() -> void:
+	if kind != HeroKind.ROGUE:
+		return
+	rogue_attack_visual_timer = ROGUE_ATTACK_VISUAL_DURATION
+	if hero_sprite != null and hero_sprite.sprite_frames != null and hero_sprite.sprite_frames.has_animation(ROGUE_ATTACK_ANIM_NAME):
+		hero_sprite.play(ROGUE_ATTACK_ANIM_NAME)
 
 func _current_bob_offset() -> float:
 	if health <= 0.0:
@@ -1084,6 +1133,8 @@ func trigger_halo_switch_feedback() -> void:
 func process_visual_tick(delta: float) -> void:
 	visual_time += delta
 	ranger_attack_visual_timer = maxf(0.0, ranger_attack_visual_timer - delta)
+	knight_attack_visual_timer = maxf(0.0, knight_attack_visual_timer - delta)
+	rogue_attack_visual_timer = maxf(0.0, rogue_attack_visual_timer - delta)
 	_sync_hero_sprite_visuals()
 	var need_redraw := false
 	if hit_flash_timer > 0.0:
@@ -1093,6 +1144,10 @@ func process_visual_tick(delta: float) -> void:
 		switch_flash_timer = maxf(0.0, switch_flash_timer - delta)
 		need_redraw = true
 	if ranger_attack_visual_timer > 0.0:
+		need_redraw = true
+	if knight_attack_visual_timer > 0.0:
+		need_redraw = true
+	if rogue_attack_visual_timer > 0.0:
 		need_redraw = true
 	if ranger_heal_pulse_timer > 0.0:
 		ranger_heal_pulse_timer = maxf(0.0, ranger_heal_pulse_timer - delta)

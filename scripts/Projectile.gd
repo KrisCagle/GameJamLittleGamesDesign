@@ -5,6 +5,9 @@ enum Team { HERO, ENEMY }
 const ENEMY_RANGED_PROJECTILE_SHEET_PATH := "res://assets/enemies/enemy_ranged_projectile_attack.png"
 const ENEMY_RANGED_PROJECTILE_ANIM := "attack"
 const ENEMY_RANGED_PROJECTILE_FRAME_COUNT := 5
+const HERO_ARROW_SHEET_PATH := "res://assets/projectiles/arrow_sheet5.png"
+const HERO_ARROW_ANIM := "fly"
+const HERO_ARROW_FRAME_COUNT := 5
 
 var team: int = Team.HERO
 var velocity: Vector2 = Vector2.ZERO
@@ -74,36 +77,48 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, radius + 2.0, Color(body_color.r, body_color.g, body_color.b, 0.22))
 
 func _setup_projectile_visual() -> void:
-	if style != "enemy_ranged" or team != Team.ENEMY:
+	if style == "enemy_ranged" and team == Team.ENEMY:
+		var enemy_texture: Texture2D = load(ENEMY_RANGED_PROJECTILE_SHEET_PATH)
+		if enemy_texture == null:
+			return
+		_setup_sheet_projectile_sprite(enemy_texture, ENEMY_RANGED_PROJECTILE_ANIM, ENEMY_RANGED_PROJECTILE_FRAME_COUNT, 10.5, Vector2(1.95, 1.95), Color(1.0, 0.96, 0.94, 1.0))
+		return
+	if style == "hero_arrow" and team == Team.HERO:
+		var hero_texture: Texture2D = load(HERO_ARROW_SHEET_PATH)
+		if hero_texture == null:
+			return
+		_setup_sheet_projectile_sprite(hero_texture, HERO_ARROW_ANIM, HERO_ARROW_FRAME_COUNT, 14.0, Vector2(2.05, 2.05), Color(1.0, 0.98, 0.95, 1.0))
 		return
 
-	var texture: Texture2D = load(ENEMY_RANGED_PROJECTILE_SHEET_PATH)
+func _setup_sheet_projectile_sprite(texture: Texture2D, anim_name: String, fallback_frame_count: int, anim_speed: float, sprite_scale: Vector2, tint: Color) -> void:
 	if texture == null:
 		return
-
-	var frame_w: int = int(floor(float(texture.get_width()) / float(ENEMY_RANGED_PROJECTILE_FRAME_COUNT)))
 	var frame_h: int = texture.get_height()
+	var frame_count: int = fallback_frame_count
+	if frame_count <= 0 or texture.get_width() % frame_count != 0:
+		frame_count = maxi(1, int(round(float(texture.get_width()) / maxf(float(texture.get_height()), 1.0))))
+	var frame_w: int = int(floor(float(texture.get_width()) / float(frame_count)))
 	if frame_w <= 0 or frame_h <= 0:
 		return
 
 	var frames: SpriteFrames = SpriteFrames.new()
-	frames.add_animation(ENEMY_RANGED_PROJECTILE_ANIM)
-	frames.set_animation_loop(ENEMY_RANGED_PROJECTILE_ANIM, true)
-	frames.set_animation_speed(ENEMY_RANGED_PROJECTILE_ANIM, 10.5)
-	for i in range(ENEMY_RANGED_PROJECTILE_FRAME_COUNT):
+	frames.add_animation(anim_name)
+	frames.set_animation_loop(anim_name, true)
+	frames.set_animation_speed(anim_name, anim_speed)
+	for i in range(frame_count):
 		var atlas: AtlasTexture = AtlasTexture.new()
 		atlas.atlas = texture
 		atlas.region = Rect2(i * frame_w, 0, frame_w, frame_h)
 		atlas.filter_clip = true
-		frames.add_frame(ENEMY_RANGED_PROJECTILE_ANIM, atlas)
+		frames.add_frame(anim_name, atlas)
 
 	projectile_sprite = AnimatedSprite2D.new()
 	projectile_sprite.name = "ProjectileSprite"
 	projectile_sprite.centered = true
 	projectile_sprite.z_index = 6
 	projectile_sprite.sprite_frames = frames
-	projectile_sprite.animation = ENEMY_RANGED_PROJECTILE_ANIM
-	projectile_sprite.scale = Vector2(1.95, 1.95)
-	projectile_sprite.modulate = Color(1.0, 0.96, 0.94, 1.0)
+	projectile_sprite.animation = anim_name
+	projectile_sprite.scale = sprite_scale
+	projectile_sprite.modulate = tint
 	add_child(projectile_sprite)
-	projectile_sprite.play(ENEMY_RANGED_PROJECTILE_ANIM)
+	projectile_sprite.play(anim_name)

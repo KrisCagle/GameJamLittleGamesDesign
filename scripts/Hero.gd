@@ -7,11 +7,15 @@ const HERO_ANIM_NAME := "idle"
 const HERO_SHEET_FRAME_COUNT := 8
 const KNIGHT_SPRITE_PATH := "res://assets/heroes/tank_idle.png"
 const RANGER_SPRITE_PATH := "res://assets/heroes/ranger_idle.png"
+const RANGER_ATTACK_SPRITE_PATH := "res://assets/heroes/ranger_attack_1.png"
 const ROGUE_SPRITE_PATH := "res://assets/heroes/rogue_idle.png"
 const HERO_SIZE_MULT := 1.5
 const HERO_UNIFORM_BASE_SCALE := Vector2(0.98, 0.98)
 const HERO_MOVE_SPEED_MULT := 0.94
 const HERO_DAMAGE_MULT := 1.56
+const RANGER_ATTACK_ANIM_NAME := "attack"
+const RANGER_ATTACK_FRAME_COUNT := 5
+const RANGER_ATTACK_VISUAL_DURATION := 0.24
 
 var kind: int = HeroKind.KNIGHT
 var hero_name: String = "Knight"
@@ -58,6 +62,7 @@ var ranger_triple_arrows_unlocked: bool = false
 var ranger_heal_visual_radius: float = 0.0
 var ranger_heal_pulse_timer: float = 0.0
 var ranger_heal_pulse_phase: float = 0.0
+var ranger_attack_visual_timer: float = 0.0
 var team_power: float = 0.0
 
 const ROGUE_ASSIST_TRIGGER_RATIO := 0.73
@@ -177,6 +182,7 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	ranger_heal_visual_radius = 0.0
 	ranger_heal_pulse_timer = 0.0
 	ranger_heal_pulse_phase = randf() * TAU
+	ranger_attack_visual_timer = 0.0
 	team_power = 0.0
 	current_velocity = Vector2.ZERO
 	knockback_velocity = Vector2.ZERO
@@ -443,6 +449,7 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 					"radius": 5.0,
 					"life": 2.0,
 					"color": Color(0.98, 0.46, 0.92),
+					"style": "hero_arrow",
 					"homing_target": active_target,
 					"homing_turn_rate": homing_rate
 				})
@@ -456,9 +463,11 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 				"radius": 5.0,
 				"life": 2.0,
 				"color": Color(0.98, 0.46, 0.92),
+				"style": "hero_arrow",
 				"homing_target": active_target,
 				"homing_turn_rate": 6.0 if has_halo else 4.2
 			})
+		_trigger_ranger_attack_visual()
 		var ranged_cooldown_mult: float = 0.86 if has_halo else 1.0
 		var ranged_power: float = team_power if has_halo else team_power * 0.45
 		ranged_cooldown_mult *= lerpf(1.0, 0.78, ranged_power)
@@ -893,8 +902,7 @@ func _hero_sprite_scale_for_kind(hero_kind: int) -> Vector2:
 
 func _ensure_hero_sprite() -> void:
 	if hero_sprite != null:
-		if not hero_sprite.is_playing():
-			hero_sprite.play(HERO_ANIM_NAME)
+		_sync_hero_sprite_visuals()
 		return
 
 	var texture: Texture2D = load(_hero_sprite_path_for_kind(kind))
@@ -906,24 +914,15 @@ func _ensure_hero_sprite() -> void:
 	if tex_w <= 0 or tex_h <= 0:
 		return
 
-	var frame_count: int = HERO_SHEET_FRAME_COUNT
-	if tex_w % HERO_SHEET_FRAME_COUNT != 0:
-		frame_count = maxi(1, int(round(float(tex_w) / maxf(float(tex_h), 1.0))))
-	frame_count = clampi(frame_count, 1, 16)
-	var frame_width: int = int(floor(float(tex_w) / float(frame_count)))
-	if frame_width <= 0:
+	var frames: SpriteFrames = SpriteFrames.new()
+	var idle_added: bool = _append_sheet_animation(frames, texture, HERO_ANIM_NAME, HERO_SHEET_FRAME_COUNT, 8.0, true)
+	if not idle_added:
 		return
 
-	var frames: SpriteFrames = SpriteFrames.new()
-	frames.add_animation(HERO_ANIM_NAME)
-	frames.set_animation_loop(HERO_ANIM_NAME, true)
-	frames.set_animation_speed(HERO_ANIM_NAME, 8.0)
-	for i in range(frame_count):
-		var atlas: AtlasTexture = AtlasTexture.new()
-		atlas.atlas = texture
-		atlas.region = Rect2(i * frame_width, 0, frame_width, tex_h)
-		atlas.filter_clip = true
-		frames.add_frame(HERO_ANIM_NAME, atlas)
+	if kind == HeroKind.RANGER:
+		var ranger_attack_texture: Texture2D = load(RANGER_ATTACK_SPRITE_PATH)
+		if ranger_attack_texture != null:
+			_append_sheet_animation(frames, ranger_attack_texture, RANGER_ATTACK_ANIM_NAME, RANGER_ATTACK_FRAME_COUNT, 13.0, false)
 
 	hero_sprite = AnimatedSprite2D.new()
 	hero_sprite.name = "HeroSprite"
@@ -935,6 +934,34 @@ func _ensure_hero_sprite() -> void:
 	hero_sprite.scale = _hero_sprite_scale_for_kind(kind)
 	add_child(hero_sprite)
 	hero_sprite.play(HERO_ANIM_NAME)
+
+func _append_sheet_animation(frames: SpriteFrames, texture: Texture2D, anim_name: String, fallback_frame_count: int, anim_speed: float, loop: bool) -> bool:
+	if frames == null or texture == null:
+		return false
+	var tex_w: int = texture.get_width()
+	var tex_h: int = texture.get_height()
+	if tex_w <= 0 or tex_h <= 0:
+		return false
+
+	var frame_count: int = fallback_frame_count
+	if frame_count <= 0 or tex_w % frame_count != 0:
+		frame_count = maxi(1, int(round(float(tex_w) / maxf(float(tex_h), 1.0))))
+	frame_count = clampi(frame_count, 1, 32)
+	var frame_width: int = int(floor(float(tex_w) / float(frame_count)))
+	if frame_width <= 0:
+		return false
+
+	if not frames.has_animation(anim_name):
+		frames.add_animation(anim_name)
+	frames.set_animation_loop(anim_name, loop)
+	frames.set_animation_speed(anim_name, anim_speed)
+	for i in range(frame_count):
+		var atlas: AtlasTexture = AtlasTexture.new()
+		atlas.atlas = texture
+		atlas.region = Rect2(i * frame_width, 0, frame_width, tex_h)
+		atlas.filter_clip = true
+		frames.add_frame(anim_name, atlas)
+	return true
 
 func _update_facing_from_velocity(velocity: Vector2) -> void:
 	if absf(velocity.x) < FACING_VELOCITY_DEADZONE:
@@ -957,12 +984,26 @@ func _set_facing_from_direction(direction: Vector2, lock_time: float = 0.0) -> v
 func _sync_hero_sprite_visuals() -> void:
 	if hero_sprite == null:
 		return
+	var desired_anim: String = HERO_ANIM_NAME
+	if kind == HeroKind.RANGER and ranger_attack_visual_timer > 0.0 and hero_sprite.sprite_frames != null and hero_sprite.sprite_frames.has_animation(RANGER_ATTACK_ANIM_NAME):
+		desired_anim = RANGER_ATTACK_ANIM_NAME
+	if hero_sprite.animation != desired_anim:
+		hero_sprite.play(desired_anim)
+	elif not hero_sprite.is_playing():
+		hero_sprite.play(desired_anim)
 	hero_sprite.flip_h = facing_left
 	hero_sprite.position = Vector2(0.0, _current_bob_offset())
 	if health <= 0.0:
 		hero_sprite.modulate = Color(0.34, 0.34, 0.34, 0.95)
 	else:
 		hero_sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
+
+func _trigger_ranger_attack_visual() -> void:
+	if kind != HeroKind.RANGER:
+		return
+	ranger_attack_visual_timer = RANGER_ATTACK_VISUAL_DURATION
+	if hero_sprite != null and hero_sprite.sprite_frames != null and hero_sprite.sprite_frames.has_animation(RANGER_ATTACK_ANIM_NAME):
+		hero_sprite.play(RANGER_ATTACK_ANIM_NAME)
 
 func _current_bob_offset() -> float:
 	if health <= 0.0:
@@ -1042,6 +1083,7 @@ func trigger_halo_switch_feedback() -> void:
 
 func process_visual_tick(delta: float) -> void:
 	visual_time += delta
+	ranger_attack_visual_timer = maxf(0.0, ranger_attack_visual_timer - delta)
 	_sync_hero_sprite_visuals()
 	var need_redraw := false
 	if hit_flash_timer > 0.0:
@@ -1049,6 +1091,8 @@ func process_visual_tick(delta: float) -> void:
 		need_redraw = true
 	if switch_flash_timer > 0.0:
 		switch_flash_timer = maxf(0.0, switch_flash_timer - delta)
+		need_redraw = true
+	if ranger_attack_visual_timer > 0.0:
 		need_redraw = true
 	if ranger_heal_pulse_timer > 0.0:
 		ranger_heal_pulse_timer = maxf(0.0, ranger_heal_pulse_timer - delta)

@@ -17,13 +17,13 @@ const HERO_MOVE_SPEED_MULT := 0.94
 const HERO_DAMAGE_MULT := 1.56
 const RANGER_ATTACK_ANIM_NAME := "attack"
 const RANGER_ATTACK_FRAME_COUNT := 5
-const RANGER_ATTACK_VISUAL_DURATION := 0.24
+const RANGER_ATTACK_VISUAL_DURATION := 0.4
 const KNIGHT_ATTACK_ANIM_NAME := "attack"
 const KNIGHT_ATTACK_FRAME_COUNT := 8
-const KNIGHT_ATTACK_VISUAL_DURATION := 0.24
+const KNIGHT_ATTACK_VISUAL_DURATION := 0.68
 const ROGUE_ATTACK_ANIM_NAME := "attack"
 const ROGUE_ATTACK_FRAME_COUNT := 4
-const ROGUE_ATTACK_VISUAL_DURATION := 0.2
+const ROGUE_ATTACK_VISUAL_DURATION := 0.3
 
 var kind: int = HeroKind.KNIGHT
 var hero_name: String = "Knight"
@@ -113,8 +113,11 @@ const TANK_HEAVY_RADIUS_BONUS := 96.0
 const TANK_HEAVY_DAMAGE_MULT := 2.35
 const RANGER_TRIPLE_SPREAD := 0.2
 const FACING_VELOCITY_DEADZONE := 12.0
-const FACING_DIRECTION_DEADZONE := 0.16
+const FACING_DIRECTION_DEADZONE := 0.12
+const FACING_SWITCH_THRESHOLD := 0.28
+const FACING_SWITCH_COOLDOWN := 0.09
 const ATTACK_FACING_LOCK_TIME := 0.18
+const HALO_SPARKLE_COUNT := 8
 
 var rogue_guard_ally: Hero = null
 var rogue_guard_lock_timer: float = 0.0
@@ -127,6 +130,7 @@ var bob_phase: float = 0.0
 var bob_amp: float = 0.0
 var bob_freq: float = 0.0
 var facing_lock_timer: float = 0.0
+var facing_switch_cooldown_timer: float = 0.0
 
 func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	kind = hero_kind
@@ -213,6 +217,7 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 			bob_freq = 4.8
 	facing_left = false
 	facing_lock_timer = 0.0
+	facing_switch_cooldown_timer = 0.0
 	_ensure_hero_sprite()
 	_sync_hero_sprite_visuals()
 	queue_redraw()
@@ -223,6 +228,7 @@ func process_tick(delta: float, enemies: Array[Enemy], heroes: Array[Hero], aren
 
 	attack_timer = maxf(0.0, attack_timer - delta)
 	facing_lock_timer = maxf(0.0, facing_lock_timer - delta)
+	facing_switch_cooldown_timer = maxf(0.0, facing_switch_cooldown_timer - delta)
 	rogue_guard_lock_timer = maxf(0.0, rogue_guard_lock_timer - delta)
 	knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 420.0 * delta)
 	tank_heavy_cooldown_timer = maxf(0.0, tank_heavy_cooldown_timer - delta)
@@ -401,7 +407,6 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 
 	var distance: float = global_position.distance_to(active_target.global_position)
 	var attack_face_dir: Vector2 = (active_target.global_position - global_position).normalized()
-	_set_facing_from_direction(attack_face_dir, ATTACK_FACING_LOCK_TIME)
 	if kind == HeroKind.RANGER:
 		var ranged_limit: float = attack_range + 96.0 + team_power * 68.0
 		if distance > ranged_limit:
@@ -413,7 +418,6 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 			active_target = ranged_fallback
 			distance = global_position.distance_to(active_target.global_position)
 			attack_face_dir = (active_target.global_position - global_position).normalized()
-			_set_facing_from_direction(attack_face_dir, ATTACK_FACING_LOCK_TIME)
 	else:
 		var melee_limit: float = attack_range + body_radius + 4.0
 		if distance > melee_limit:
@@ -423,7 +427,6 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 			active_target = melee_fallback
 			distance = global_position.distance_to(active_target.global_position)
 			attack_face_dir = (active_target.global_position - global_position).normalized()
-			_set_facing_from_direction(attack_face_dir, ATTACK_FACING_LOCK_TIME)
 
 	var damage_mult: float = 1.0
 	if has_halo:
@@ -480,6 +483,7 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 				"homing_turn_rate": 6.0 if has_halo else 4.2
 			})
 		_trigger_ranger_attack_visual()
+		_set_facing_from_direction(attack_face_dir, _attack_facing_lock_duration())
 		var ranged_cooldown_mult: float = 0.86 if has_halo else 1.0
 		var ranged_power: float = team_power if has_halo else team_power * 0.45
 		ranged_cooldown_mult *= lerpf(1.0, 0.78, ranged_power)
@@ -489,11 +493,11 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 	var attack_dir: Vector2 = (active_target.global_position - global_position).normalized()
 	if attack_dir.length_squared() <= 0.0001:
 		attack_dir = Vector2.RIGHT
-	_set_facing_from_direction(attack_dir, ATTACK_FACING_LOCK_TIME)
 
 	if kind == HeroKind.KNIGHT and tank_heavy_attack_unlocked and tank_heavy_charge_timer <= 0.0 and tank_heavy_cooldown_timer <= 0.0:
 		tank_heavy_charge_timer = TANK_HEAVY_CHARGE_TIME
 		tank_heavy_target_point = active_target.global_position
+		_set_facing_from_direction(attack_dir, maxf(ATTACK_FACING_LOCK_TIME, TANK_HEAVY_CHARGE_TIME))
 		attack_timer = maxf(attack_cooldown * 0.36, TANK_HEAVY_CHARGE_TIME)
 		return
 
@@ -501,6 +505,7 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 		_trigger_knight_attack_visual()
 	elif kind == HeroKind.ROGUE:
 		_trigger_rogue_attack_visual()
+	_set_facing_from_direction(attack_dir, _attack_facing_lock_duration())
 
 	var melee_reach: float = attack_range + body_radius + 4.0
 	var melee_half_angle: float = deg_to_rad(46.0)
@@ -566,8 +571,8 @@ func _execute_tank_heavy_attack(enemies: Array[Enemy]) -> void:
 		return
 	var to_target: Vector2 = tank_heavy_target_point - global_position
 	var attack_dir: Vector2 = to_target.normalized() if to_target.length_squared() > 0.0001 else Vector2.RIGHT
-	_set_facing_from_direction(attack_dir, ATTACK_FACING_LOCK_TIME)
 	_trigger_knight_attack_visual()
+	_set_facing_from_direction(attack_dir, _attack_facing_lock_duration())
 	var heavy_reach: float = attack_range + body_radius + TANK_HEAVY_RADIUS_BONUS
 	var heavy_damage: float = attack_damage * TANK_HEAVY_DAMAGE_MULT
 	var hit_count: int = 0
@@ -1002,7 +1007,14 @@ func _set_facing_from_direction(direction: Vector2, lock_time: float = 0.0) -> v
 	var want_left: bool = direction.x < 0.0
 	if facing_lock_timer > 0.0 and want_left != facing_left:
 		return
-	facing_left = want_left
+	var changed_direction: bool = want_left != facing_left
+	if changed_direction:
+		if absf(direction.x) < FACING_SWITCH_THRESHOLD:
+			return
+		if facing_switch_cooldown_timer > 0.0:
+			return
+		facing_left = want_left
+		facing_switch_cooldown_timer = FACING_SWITCH_COOLDOWN
 	if lock_time > 0.0:
 		facing_lock_timer = maxf(facing_lock_timer, lock_time)
 	_sync_hero_sprite_visuals()
@@ -1025,7 +1037,9 @@ func _sync_hero_sprite_visuals() -> void:
 	if hero_sprite.animation != desired_anim:
 		hero_sprite.play(desired_anim)
 	elif not hero_sprite.is_playing():
-		hero_sprite.play(desired_anim)
+		# Don't restart one-shot attack animations every frame; let them finish and hold.
+		if desired_anim == HERO_ANIM_NAME:
+			hero_sprite.play(desired_anim)
 	hero_sprite.flip_h = facing_left
 	hero_sprite.position = Vector2(0.0, _current_bob_offset())
 	if health <= 0.0:
@@ -1036,23 +1050,64 @@ func _sync_hero_sprite_visuals() -> void:
 func _trigger_ranger_attack_visual() -> void:
 	if kind != HeroKind.RANGER:
 		return
-	ranger_attack_visual_timer = RANGER_ATTACK_VISUAL_DURATION
-	if hero_sprite != null and hero_sprite.sprite_frames != null and hero_sprite.sprite_frames.has_animation(RANGER_ATTACK_ANIM_NAME):
+	var visual_duration: float = _animation_duration(RANGER_ATTACK_ANIM_NAME, RANGER_ATTACK_VISUAL_DURATION)
+	ranger_attack_visual_timer = maxf(ranger_attack_visual_timer, visual_duration)
+	if _should_start_attack_anim_now(RANGER_ATTACK_ANIM_NAME):
 		hero_sprite.play(RANGER_ATTACK_ANIM_NAME)
 
 func _trigger_knight_attack_visual() -> void:
 	if kind != HeroKind.KNIGHT:
 		return
-	knight_attack_visual_timer = KNIGHT_ATTACK_VISUAL_DURATION
-	if hero_sprite != null and hero_sprite.sprite_frames != null and hero_sprite.sprite_frames.has_animation(KNIGHT_ATTACK_ANIM_NAME):
+	var visual_duration: float = _animation_duration(KNIGHT_ATTACK_ANIM_NAME, KNIGHT_ATTACK_VISUAL_DURATION)
+	knight_attack_visual_timer = maxf(knight_attack_visual_timer, visual_duration)
+	if _should_start_attack_anim_now(KNIGHT_ATTACK_ANIM_NAME):
 		hero_sprite.play(KNIGHT_ATTACK_ANIM_NAME)
 
 func _trigger_rogue_attack_visual() -> void:
 	if kind != HeroKind.ROGUE:
 		return
-	rogue_attack_visual_timer = ROGUE_ATTACK_VISUAL_DURATION
-	if hero_sprite != null and hero_sprite.sprite_frames != null and hero_sprite.sprite_frames.has_animation(ROGUE_ATTACK_ANIM_NAME):
+	var visual_duration: float = _animation_duration(ROGUE_ATTACK_ANIM_NAME, ROGUE_ATTACK_VISUAL_DURATION)
+	rogue_attack_visual_timer = maxf(rogue_attack_visual_timer, visual_duration)
+	if _should_start_attack_anim_now(ROGUE_ATTACK_ANIM_NAME):
 		hero_sprite.play(ROGUE_ATTACK_ANIM_NAME)
+
+func _should_start_attack_anim_now(anim_name: String) -> bool:
+	if hero_sprite == null or hero_sprite.sprite_frames == null:
+		return false
+	var frames: SpriteFrames = hero_sprite.sprite_frames
+	if not frames.has_animation(anim_name):
+		return false
+	if hero_sprite.animation != anim_name:
+		return true
+	if not hero_sprite.is_playing():
+		return true
+	var frame_count: int = frames.get_frame_count(anim_name)
+	if frame_count <= 1:
+		return false
+	# If the one-shot attack anim is already mid-play, avoid resetting to frame 0.
+	return hero_sprite.frame >= frame_count - 1
+
+func _animation_duration(anim_name: String, fallback: float) -> float:
+	if hero_sprite == null or hero_sprite.sprite_frames == null:
+		return fallback
+	var frames: SpriteFrames = hero_sprite.sprite_frames
+	if not frames.has_animation(anim_name):
+		return fallback
+	var frame_count: int = frames.get_frame_count(anim_name)
+	var anim_speed: float = frames.get_animation_speed(anim_name)
+	if frame_count <= 0 or anim_speed <= 0.001:
+		return fallback
+	return maxf(fallback, float(frame_count) / anim_speed)
+
+func _attack_facing_lock_duration() -> float:
+	match kind:
+		HeroKind.RANGER:
+			return maxf(ATTACK_FACING_LOCK_TIME, ranger_attack_visual_timer)
+		HeroKind.KNIGHT:
+			return maxf(ATTACK_FACING_LOCK_TIME, knight_attack_visual_timer)
+		HeroKind.ROGUE:
+			return maxf(ATTACK_FACING_LOCK_TIME, rogue_attack_visual_timer)
+	return ATTACK_FACING_LOCK_TIME
 
 func _current_bob_offset() -> float:
 	if health <= 0.0:
@@ -1218,6 +1273,20 @@ func _draw() -> void:
 		var halo_width: float = 4.0 + team_power * 2.2
 		draw_arc(Vector2(0.0, bob_y), halo_radius, 0.0, TAU, 36, Color(1.0, 0.95, 0.45), halo_width)
 		draw_circle(Vector2(0.0, bob_y), body_radius + 3.0 + team_power * 2.4, Color(1.0, 0.95, 0.45, 0.2 + team_power * 0.08))
+		var sparkle_orbit_speed: float = 1.05 + team_power * 0.7
+		for i in range(HALO_SPARKLE_COUNT):
+			var phase: float = visual_time * sparkle_orbit_speed + float(i) * (TAU / float(HALO_SPARKLE_COUNT)) + float(kind) * 0.31
+			var twinkle: float = 0.52 + 0.48 * sin(visual_time * 6.6 + float(i) * 1.23 + float(kind) * 0.74)
+			var sparkle_radius: float = halo_radius + 4.0 + sin(visual_time * 3.2 + float(i) * 0.9) * 1.9
+			var sparkle_point: Vector2 = Vector2(0.0, bob_y) + Vector2.RIGHT.rotated(phase) * sparkle_radius
+			var sparkle_size: float = 0.8 + twinkle * 1.2 + team_power * 0.45
+			var sparkle_alpha: float = 0.18 + twinkle * 0.48
+			var sparkle_color: Color = Color(1.0, 0.98, 0.82, sparkle_alpha)
+			draw_circle(sparkle_point, sparkle_size, sparkle_color)
+			if i % 3 == 0:
+				var cross_half: float = sparkle_size * 0.78
+				draw_line(sparkle_point + Vector2(-cross_half, 0.0), sparkle_point + Vector2(cross_half, 0.0), Color(1.0, 0.98, 0.86, sparkle_alpha * 0.8), 1.1, true)
+				draw_line(sparkle_point + Vector2(0.0, -cross_half), sparkle_point + Vector2(0.0, cross_half), Color(1.0, 0.98, 0.86, sparkle_alpha * 0.8), 1.1, true)
 
 	if team_power > 0.04 and health > 0.0:
 		var cohesion_radius: float = body_radius + 9.0 + team_power * 6.0

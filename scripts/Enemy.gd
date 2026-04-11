@@ -97,17 +97,17 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			_hide_swarm_sprite()
 			_hide_ranged_sprite()
 		EnemyKind.BOSS:
-			max_health = 600.0 + float(max(0, wave_level - 5)) * 34.0
+			max_health = 520.0 + float(max(0, wave_level - 5)) * 28.0
 			health = max_health
 			move_speed = 62.0
 			attack_range = 260.0
-			damage = 14.0 + float(max(0, wave_level - 5)) * 0.65
-			attack_cooldown = 1.2
+			damage = 12.0 + float(max(0, wave_level - 5)) * 0.5
+			attack_cooldown = 1.35
 			body_radius = 30.0
 			body_color = Color(0.9, 0.22, 0.3)
-			boss_aoe_timer = randf_range(2.0, 2.9)
-			boss_summon_timer = randf_range(2.8, 3.8)
-			boss_volley_timer = randf_range(1.0, 1.5)
+			boss_aoe_timer = randf_range(2.4, 3.3)
+			boss_summon_timer = randf_range(5.0, 6.5)
+			boss_volley_timer = randf_range(1.35, 1.9)
 			boss_window_timer = randf_range(5.4, 7.0)
 			boss_window_duration = 0.0
 			boss_window_active = false
@@ -207,17 +207,17 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 
 		if boss_aoe_timer <= 0.0:
 			_emit_boss_projectile_ring(projectile_spawns)
-			var aoe_cooldown: float = maxf(1.6, 2.9 - boss_time_alive * 0.04)
+			var aoe_cooldown: float = maxf(2.1, 3.35 - boss_time_alive * 0.03)
 			boss_aoe_timer = aoe_cooldown + randf_range(-0.22, 0.22)
 
 		if boss_summon_timer <= 0.0:
 			_queue_boss_summons(summon_spawns)
-			var summon_cooldown: float = maxf(1.8, 4.2 - boss_time_alive * 0.08)
+			var summon_cooldown: float = maxf(2.4, 4.8 - boss_time_alive * 0.06)
 			boss_summon_timer = summon_cooldown + randf_range(-0.3, 0.25)
 
 		if boss_volley_timer <= 0.0:
 			_spawn_boss_projectile_volley(target_hero, projectile_spawns)
-			var volley_cooldown: float = 1.0 if not boss_window_active else 1.5
+			var volley_cooldown: float = 1.3 if not boss_window_active else 1.85
 			boss_volley_timer = volley_cooldown + randf_range(-0.15, 0.12)
 
 	if attack_timer <= 0.0 and dist <= attack_range and target_hero.health > 0.0:
@@ -432,9 +432,9 @@ func _hide_ranged_sprite() -> void:
 
 func _emit_boss_projectile_ring(projectile_spawns: Array[Dictionary]) -> void:
 	var phase: int = clampi(int(floor(boss_time_alive / 18.0)), 0, 5)
-	var projectile_count: int = 18 + phase * 2
-	var shot_speed: float = 250.0 + float(phase) * 24.0
-	var ring_damage: float = 8.0 + float(phase) * 1.1
+	var projectile_count: int = 14 + phase * 2
+	var shot_speed: float = 224.0 + float(phase) * 18.0
+	var ring_damage: float = 6.8 + float(phase) * 0.9
 
 	for i in range(projectile_count):
 		var angle: float = TAU * float(i) / float(projectile_count)
@@ -444,7 +444,7 @@ func _emit_boss_projectile_ring(projectile_spawns: Array[Dictionary]) -> void:
 			"position": global_position,
 			"target_position": global_position + shot_dir * 240.0,
 			"damage": ring_damage,
-			"speed": shot_speed * 0.9,
+			"speed": shot_speed * 0.88,
 			"radius": 5.6,
 			"life": 2.2,
 			"color": Color(1.0, 0.44, 0.34)
@@ -452,12 +452,18 @@ func _emit_boss_projectile_ring(projectile_spawns: Array[Dictionary]) -> void:
 
 func _queue_boss_summons(summon_spawns: Array[Dictionary]) -> void:
 	var phase: int = clampi(int(floor(boss_time_alive / 15.0)), 0, 5)
-	var summon_count: int = 2 + phase
+	var summon_count: int = 0
+	if boss_time_alive >= 8.0:
+		summon_count = 1 + phase
+	if boss_time_alive >= 24.0:
+		summon_count += 1
+	if summon_count <= 0:
+		return
 
 	for i in range(summon_count):
 		var roll: float = randf()
-		var elite_chance: float = minf(0.08 + float(phase) * 0.05, 0.3)
-		var ranged_chance: float = minf(0.35 + float(phase) * 0.05, 0.62)
+		var elite_chance: float = minf(0.06 + float(phase) * 0.04, 0.24)
+		var ranged_chance: float = minf(0.32 + float(phase) * 0.04, 0.54)
 		var summon_kind: int = EnemyKind.SWARM
 		if roll < elite_chance:
 			summon_kind = EnemyKind.ELITE
@@ -485,9 +491,9 @@ func _spawn_boss_projectile_volley(target: Hero, projectile_spawns: Array[Dictio
 			"team": "enemy",
 			"position": global_position,
 			"target_position": global_position + shot_dir * 240.0,
-			"damage": damage,
-			"speed": 332.0,
-			"radius": 6.6,
+			"damage": damage * 0.9,
+			"speed": 304.0,
+			"radius": 6.2,
 			"life": 2.2,
 			"color": Color(1.0, 0.4, 0.32)
 		})

@@ -30,6 +30,10 @@ const UPGRADE_ROGUE_TWIN_FANGS := 11
 const UPGRADE_TANK_HEAVY_ATTACK := 12
 const UPGRADE_RANGER_TRIPLE_ARROWS := 13
 const UPGRADE_HALO_SPECTER := 14
+const UPGRADE_HALO_ECHO := 15
+const UPGRADE_ROGUE_TWIN_FANGS_PLUS := 16
+const UPGRADE_TANK_HEAVY_ATTACK_PLUS := 17
+const UPGRADE_RANGER_TRIPLE_ARROWS_PLUS := 18
 
 const WORLD_SIZE := Vector2(3200, 2200)
 const ARENA_MARGIN := 44.0
@@ -47,15 +51,19 @@ const HERO_CARD_TANK_SHEET := "res://assets/heroes/tank_idle.png"
 const HERO_CARD_RANGER_SHEET := "res://assets/heroes/ranger_idle.png"
 const HERO_CARD_ROGUE_SHEET := "res://assets/heroes/rogue_idle.png"
 const START_MENU_TITLE_FONT_PATH := "res://assets/fonts/Starstruck.ttf"
-const UI_HUD_FONT_PATH := "res://assets/fonts/Mokgech-Regular.otf"
-const UI_HUD_FONT_ALT_PATH := "res://assets/fonts/Mokgech-Italic.otf"
+const UI_HUD_FONT_PATH := "res://assets/fonts/DEATHCROW.ttf"
+const UI_HUD_FONT_ALT_PATH := "res://assets/fonts/Mokgech-Regular.otf"
 const UI_TEXT_COLOR := Color(0.9, 0.24, 0.28, 1.0)
 const UI_OUTLINE_COLOR := Color(0.07, 0.0, 0.01, 0.96)
 const UI_SHADOW_COLOR := Color(0.0, 0.0, 0.0, 0.9)
 const FLOOR_TEXTURE_PATH := "res://assets/floor/floor_tileset12.png"
 const FLOOR_TEXTURE_CENTER_COVERAGE := 0.9
 const FLOOR_TEXTURE_WEB_COVERAGE_MULT := 0.52
-const FLOOR_TEXTURE_TILE_WORLD_SIZE := 420.0
+const FLOOR_TEXTURE_TILE_WORLD_SIZE := 240.0
+const FLOOR_TEXTURE_REPEAT_SRC_FRACTION := 0.25
+const FLOOR_TEXTURE_REPEAT_SRC_INSET := 0.0
+const FLOOR_TEXTURE_CENTER_WORLD_SIZE := 960.0
+const FLOOR_TEXTURE_CENTER_ALPHA := 0.9
 const FLOOR_TILE_SIZE := 104.0
 const FLOOR_PATTERN_PAD := 220.0
 const WALL_FRAME_THICKNESS := 34.0
@@ -98,13 +106,22 @@ const PERFECT_POSITION_IMPACT_FLASH_INTENSITY := 1.08
 const PERFECT_POSITION_SOUND_COOLDOWN := 0.7
 const SPECTRAL_HALO_SPEED := 356.0
 const SPECTRAL_HALO_RADIUS := 14.0
-const SPECTRAL_HALO_CONTACT_DAMAGE := 10.5
+const SPECTRAL_HALO_CONTACT_DAMAGE := 21.0
 const SPECTRAL_HALO_HIT_COOLDOWN := 0.14
+const SPECTRAL_HALO_HEAL_RADIUS_BONUS := 16.0
+const SPECTRAL_HALO_HEAL_AMOUNT := 7.0
+const SPECTRAL_HALO_HEAL_COOLDOWN := 0.45
+const SPECTRAL_HALO_MAX_COUNT := 4
 const ENABLE_SFX := false
 const PERFECT_POSITION_SOUND_ENABLED := true
 const SFX_MIX_RATE := 32000.0
 const SFX_BUFFER_LENGTH := 0.16
 const SFX_MIN_INTERVAL := 0.035
+const START_SCREEN_BUTTON_SIZE := Vector2(300.0, 72.0)
+const GAME_OVER_BUTTON_SIZE := Vector2(360.0, 72.0)
+const GAME_OVER_PANEL_SIZE := Vector2(560.0, 320.0)
+const PAUSE_PANEL_SIZE := Vector2(560.0, 320.0)
+const PAUSE_BUTTON_SIZE := Vector2(360.0, 68.0)
 
 @onready var heroes_root: Node2D = $Heroes
 @onready var enemies_root: Node2D = $Enemies
@@ -151,7 +168,9 @@ var waiting_for_next_wave: bool = false
 var intermission_timer: float = 0.0
 
 var game_over: bool = false
-var start_selection_active: bool = true
+var start_screen_active: bool = true
+var start_selection_active: bool = false
+var pause_menu_active: bool = false
 var upgrade_phase_active: bool = false
 var upgrade_choices: Array[int] = []
 var upgrade_levels: Dictionary = {}
@@ -192,9 +211,11 @@ var perfect_position_feedback_timer: float = 0.0
 var perfect_position_impact_flash_timer: float = 0.0
 var perfect_position_sound_cooldown_timer: float = 0.0
 var spectral_halo_unlocked: bool = false
-var spectral_halo_position: Vector2 = Vector2.ZERO
-var spectral_halo_velocity: Vector2 = Vector2.ZERO
-var spectral_halo_hit_timer: float = 0.0
+var spectral_halo_count: int = 0
+var spectral_halo_positions: Array[Vector2] = []
+var spectral_halo_velocities: Array[Vector2] = []
+var spectral_halo_hit_timers: Array[float] = []
+var spectral_halo_heal_timers: Array[float] = []
 var sfx_player: AudioStreamPlayer = null
 var sfx_playback: AudioStreamGeneratorPlayback = null
 var sfx_cooldown_timer: float = 0.0
@@ -216,6 +237,10 @@ func _ready() -> void:
 	upgrade_levels[UPGRADE_TANK_HEAVY_ATTACK] = 0
 	upgrade_levels[UPGRADE_RANGER_TRIPLE_ARROWS] = 0
 	upgrade_levels[UPGRADE_HALO_SPECTER] = 0
+	upgrade_levels[UPGRADE_HALO_ECHO] = 0
+	upgrade_levels[UPGRADE_ROGUE_TWIN_FANGS_PLUS] = 0
+	upgrade_levels[UPGRADE_TANK_HEAVY_ATTACK_PLUS] = 0
+	upgrade_levels[UPGRADE_RANGER_TRIPLE_ARROWS_PLUS] = 0
 
 	_spawn_heroes()
 	_load_start_card_textures()
@@ -229,6 +254,9 @@ func _ready() -> void:
 	low_spec_mode = WEB_LOW_SPEC_ENABLED and OS.has_feature("web")
 	_setup_lighting_nodes()
 	heroes_root.visible = false
+	start_screen_active = true
+	start_selection_active = false
+	pause_menu_active = false
 	halo_index = -1
 	halo_equipped = false
 	halo_charge = HALO_CHARGE_MAX
@@ -236,9 +264,13 @@ func _ready() -> void:
 	halo_toggle_lock_timer = 0.0
 	halo_switch_feedback_timer = 0.0
 	spectral_halo_unlocked = false
-	spectral_halo_position = arena_rect.get_center()
-	spectral_halo_velocity = Vector2.ZERO
-	spectral_halo_hit_timer = 0.0
+	spectral_halo_count = 0
+	spectral_halo_positions.clear()
+	spectral_halo_velocities.clear()
+	spectral_halo_hit_timers.clear()
+	spectral_halo_heal_timers.clear()
+	for _i in range(heroes.size()):
+		spectral_halo_heal_timers.append(0.0)
 	perfect_position_active = false
 	perfect_position_feedback_timer = 0.0
 	perfect_position_impact_flash_timer = 0.0
@@ -282,8 +314,23 @@ func _process(delta: float) -> void:
 	perfect_position_impact_flash_timer = maxf(0.0, perfect_position_impact_flash_timer - delta)
 	perfect_position_sound_cooldown_timer = maxf(0.0, perfect_position_sound_cooldown_timer - delta)
 
+	if start_screen_active:
+		_update_kill_flashes(delta)
+		_update_dynamic_lighting(delta)
+		_update_camera(delta)
+		_update_ui()
+		queue_redraw()
+		return
+
 	if start_selection_active:
 		_update_kill_flashes(delta)
+		_update_dynamic_lighting(delta)
+		_update_camera(delta)
+		_update_ui()
+		queue_redraw()
+		return
+
+	if pause_menu_active:
 		_update_dynamic_lighting(delta)
 		_update_camera(delta)
 		_update_ui()
@@ -339,6 +386,25 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE:
+			if pause_menu_active:
+				_resume_from_pause()
+				return
+			if not start_screen_active and not start_selection_active and not game_over and not upgrade_phase_active:
+				_open_pause_menu()
+				return
+
+		if start_screen_active and (event.keycode == KEY_ENTER or event.keycode == KEY_SPACE):
+			_open_starting_hero_menu()
+			return
+
+		if pause_menu_active:
+			if event.keycode == KEY_ENTER or event.keycode == KEY_SPACE:
+				_resume_from_pause()
+			elif event.keycode == KEY_H or event.keycode == KEY_M:
+				_return_to_main_menu()
+			return
+
 		if start_selection_active:
 			match event.keycode:
 				KEY_1:
@@ -349,8 +415,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					_choose_starting_hero(2)
 			return
 
-		if game_over and (event.keycode == KEY_ENTER or event.keycode == KEY_R):
-			get_tree().reload_current_scene()
+		if game_over and (event.keycode == KEY_ENTER or event.keycode == KEY_R or event.keycode == KEY_SPACE):
+			_return_to_main_menu()
 			return
 
 		if upgrade_phase_active:
@@ -369,7 +435,24 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					_attempt_halo_reactivate()
 
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not game_over:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		if start_screen_active:
+			if _start_screen_button_rect().has_point(event.position):
+				_open_starting_hero_menu()
+				return
+			return
+		if pause_menu_active:
+			if _pause_resume_button_rect().has_point(event.position):
+				_resume_from_pause()
+				return
+			if _pause_home_button_rect().has_point(event.position):
+				_return_to_main_menu()
+				return
+			return
+		if game_over:
+			if _game_over_button_rect().has_point(event.position):
+				_return_to_main_menu()
+			return
 		if start_selection_active:
 			_choose_starting_hero_from_point(event.position)
 			return
@@ -605,7 +688,7 @@ func _update_dynamic_lighting(_delta: float) -> void:
 		return
 
 	var t: float = float(Time.get_ticks_msec()) * 0.001
-	var in_start_menu: bool = start_selection_active
+	var in_start_menu: bool = start_selection_active or start_screen_active
 	for i in range(min(top_glow_lights.size(), ATMOS_RAY_COUNT)):
 		var anchor: Vector2 = _top_light_anchor_position(i)
 		var pulse: float = 0.92 + 0.1 * sin(t * 1.3 + float(i) * 0.7)
@@ -676,7 +759,7 @@ func _update_dynamic_lighting(_delta: float) -> void:
 		var hl: PointLight2D = hero_lights[i]
 		hl.position = hero.global_position + Vector2(0.0, -2.0)
 
-		if start_selection_active or hero.health <= 0.0:
+		if start_selection_active or start_screen_active or pause_menu_active or hero.health <= 0.0:
 			hl.energy = 0.0
 			continue
 
@@ -745,7 +828,8 @@ func _start_wave() -> void:
 	wave += 1
 	boss_spawn_pending = wave >= 5 and (wave % 5 == 0)
 	if boss_spawn_pending:
-		spawn_remaining = WAVE_BOSS_SUPPORT_BASE + wave * WAVE_BOSS_SUPPORT_PER_WAVE
+		# Boss waves open as a clean boss-only phase; adds ramp from boss summons over time.
+		spawn_remaining = 0
 	else:
 		spawn_remaining = WAVE_BASE_ENEMIES + wave * WAVE_LINEAR_ENEMIES + int(floor(float(wave) * WAVE_SCALING_ENEMIES))
 	spawn_timer = 0.18
@@ -1100,6 +1184,38 @@ func _spawn_projectiles_from_queue() -> void:
 		projectiles.append(projectile)
 	projectile_spawns.clear()
 
+func _add_spectral_halo_slot(spawn_position: Vector2 = Vector2.ZERO) -> void:
+	if spectral_halo_positions.size() >= SPECTRAL_HALO_MAX_COUNT:
+		return
+	var spawn_pos: Vector2 = spawn_position
+	if spawn_pos == Vector2.ZERO:
+		spawn_pos = _camera_target_position()
+	spectral_halo_positions.append(_clamp_point_to_arena(spawn_pos))
+	spectral_halo_velocities.append(Vector2.RIGHT.rotated(randf() * TAU) * SPECTRAL_HALO_SPEED)
+	spectral_halo_hit_timers.append(0.08)
+
+func _ensure_spectral_halo_slots() -> void:
+	if not spectral_halo_unlocked:
+		spectral_halo_positions.clear()
+		spectral_halo_velocities.clear()
+		spectral_halo_hit_timers.clear()
+		spectral_halo_count = 0
+		return
+
+	spectral_halo_count = clampi(spectral_halo_count, 1, SPECTRAL_HALO_MAX_COUNT)
+	while spectral_halo_positions.size() < spectral_halo_count:
+		_add_spectral_halo_slot()
+	while spectral_halo_velocities.size() < spectral_halo_count:
+		spectral_halo_velocities.append(Vector2.RIGHT.rotated(randf() * TAU) * SPECTRAL_HALO_SPEED)
+	while spectral_halo_hit_timers.size() < spectral_halo_count:
+		spectral_halo_hit_timers.append(0.08)
+	while spectral_halo_positions.size() > spectral_halo_count:
+		spectral_halo_positions.remove_at(spectral_halo_positions.size() - 1)
+	while spectral_halo_velocities.size() > spectral_halo_count:
+		spectral_halo_velocities.remove_at(spectral_halo_velocities.size() - 1)
+	while spectral_halo_hit_timers.size() > spectral_halo_count:
+		spectral_halo_hit_timers.remove_at(spectral_halo_hit_timers.size() - 1)
+
 func _spectral_halo_bounds() -> Rect2:
 	var margin: float = SPECTRAL_HALO_RADIUS + 6.0
 	var view_rect: Rect2 = _viewport_rect_world().grow(-margin)
@@ -1112,53 +1228,89 @@ func _spectral_halo_bounds() -> Rect2:
 func _update_spectral_halo(delta: float) -> void:
 	if not spectral_halo_unlocked:
 		return
+	if spectral_halo_count <= 0:
+		spectral_halo_count = 1
+	_ensure_spectral_halo_slots()
 
-	if spectral_halo_velocity.length_squared() <= 0.0001:
-		spectral_halo_velocity = Vector2.RIGHT.rotated(randf() * TAU) * SPECTRAL_HALO_SPEED
+	if spectral_halo_heal_timers.size() != heroes.size():
+		spectral_halo_heal_timers.clear()
+		for _i in range(heroes.size()):
+			spectral_halo_heal_timers.append(0.0)
 
 	var bounds: Rect2 = _spectral_halo_bounds()
-	var pos: Vector2 = spectral_halo_position + spectral_halo_velocity * delta
-	var bounced: bool = false
-	if pos.x < bounds.position.x:
-		pos.x = bounds.position.x
-		spectral_halo_velocity.x = absf(spectral_halo_velocity.x)
-		bounced = true
-	elif pos.x > bounds.end.x:
-		pos.x = bounds.end.x
-		spectral_halo_velocity.x = -absf(spectral_halo_velocity.x)
-		bounced = true
-	if pos.y < bounds.position.y:
-		pos.y = bounds.position.y
-		spectral_halo_velocity.y = absf(spectral_halo_velocity.y)
-		bounced = true
-	elif pos.y > bounds.end.y:
-		pos.y = bounds.end.y
-		spectral_halo_velocity.y = -absf(spectral_halo_velocity.y)
-		bounced = true
-	if bounced:
-		var bounce_jitter: float = randf_range(-0.16, 0.16)
-		spectral_halo_velocity = spectral_halo_velocity.rotated(bounce_jitter)
-		if spectral_halo_velocity.length_squared() <= 0.0001:
-			spectral_halo_velocity = Vector2.RIGHT.rotated(randf() * TAU)
-		spectral_halo_velocity = spectral_halo_velocity.normalized() * SPECTRAL_HALO_SPEED
+	for h in range(spectral_halo_count):
+		var velocity: Vector2 = spectral_halo_velocities[h]
+		if velocity.length_squared() <= 0.0001:
+			velocity = Vector2.RIGHT.rotated(randf() * TAU) * SPECTRAL_HALO_SPEED
 
-	spectral_halo_position = pos
-	spectral_halo_hit_timer = maxf(0.0, spectral_halo_hit_timer - delta)
-	if spectral_halo_hit_timer > 0.0:
-		return
+		var pos: Vector2 = spectral_halo_positions[h] + velocity * delta
+		var bounced: bool = false
+		if pos.x < bounds.position.x:
+			pos.x = bounds.position.x
+			velocity.x = absf(velocity.x)
+			bounced = true
+		elif pos.x > bounds.end.x:
+			pos.x = bounds.end.x
+			velocity.x = -absf(velocity.x)
+			bounced = true
+		if pos.y < bounds.position.y:
+			pos.y = bounds.position.y
+			velocity.y = absf(velocity.y)
+			bounced = true
+		elif pos.y > bounds.end.y:
+			pos.y = bounds.end.y
+			velocity.y = -absf(velocity.y)
+			bounced = true
+		if bounced:
+			var bounce_jitter: float = randf_range(-0.16, 0.16)
+			velocity = velocity.rotated(bounce_jitter)
+			if velocity.length_squared() <= 0.0001:
+				velocity = Vector2.RIGHT.rotated(randf() * TAU)
+			velocity = velocity.normalized() * SPECTRAL_HALO_SPEED
 
-	for enemy: Enemy in enemies:
-		if enemy.health <= 0.0:
+		spectral_halo_positions[h] = pos
+		spectral_halo_velocities[h] = velocity
+		spectral_halo_hit_timers[h] = maxf(0.0, spectral_halo_hit_timers[h] - delta)
+
+	for i in range(heroes.size()):
+		spectral_halo_heal_timers[i] = maxf(0.0, spectral_halo_heal_timers[i] - delta)
+
+	for i in range(heroes.size()):
+		var hero: Hero = heroes[i]
+		if hero.health <= 0.0:
 			continue
-		var contact_dist: float = SPECTRAL_HALO_RADIUS + enemy.body_radius
-		if spectral_halo_position.distance_squared_to(enemy.global_position) > contact_dist * contact_dist:
+		if spectral_halo_heal_timers[i] > 0.0:
 			continue
-		enemy.set_damage_source(spectral_halo_position)
-		var contact_damage: float = SPECTRAL_HALO_CONTACT_DAMAGE * (1.0 + team_power * 0.35)
-		enemy.take_damage(contact_damage)
-		spectral_halo_hit_timer = SPECTRAL_HALO_HIT_COOLDOWN
-		_add_camera_shake(0.14)
-		break
+		var heal_dist: float = SPECTRAL_HALO_RADIUS + hero.body_radius + SPECTRAL_HALO_HEAL_RADIUS_BONUS
+		var healed: bool = false
+		for h in range(spectral_halo_count):
+			if spectral_halo_positions[h].distance_squared_to(hero.global_position) <= heal_dist * heal_dist:
+				healed = true
+				break
+		if not healed:
+			continue
+		var heal_amount: float = SPECTRAL_HALO_HEAL_AMOUNT + team_power * 3.0
+		hero.heal(heal_amount)
+		hero.trigger_halo_switch_feedback()
+		_spawn_kill_flash(hero.global_position, hero.body_radius * 0.8, 0.78)
+		spectral_halo_heal_timers[i] = SPECTRAL_HALO_HEAL_COOLDOWN
+
+	for h in range(spectral_halo_count):
+		if spectral_halo_hit_timers[h] > 0.0:
+			continue
+		var halo_pos: Vector2 = spectral_halo_positions[h]
+		for enemy: Enemy in enemies:
+			if enemy.health <= 0.0:
+				continue
+			var contact_dist: float = SPECTRAL_HALO_RADIUS + enemy.body_radius
+			if halo_pos.distance_squared_to(enemy.global_position) > contact_dist * contact_dist:
+				continue
+			enemy.set_damage_source(halo_pos)
+			var contact_damage: float = SPECTRAL_HALO_CONTACT_DAMAGE * (1.0 + team_power * 0.75)
+			enemy.take_damage(contact_damage)
+			spectral_halo_hit_timers[h] = SPECTRAL_HALO_HIT_COOLDOWN
+			_add_camera_shake(0.14)
+			break
 
 func _update_projectiles(delta: float) -> void:
 	if projectiles.is_empty():
@@ -1223,7 +1375,11 @@ func _check_for_game_over() -> void:
 			alive_count += 1
 	if alive_count <= 0:
 		game_over = true
+		pause_menu_active = false
 		halo_equipped = false
+		heroes_root.visible = false
+		enemies_root.visible = false
+		projectiles_root.visible = false
 		_sync_halo_state()
 
 func _progress_wave_timing(delta: float) -> void:
@@ -1255,7 +1411,7 @@ func _begin_upgrade_phase() -> void:
 	_sync_halo_state()
 
 func _set_world_visible_for_upgrade(visible: bool) -> void:
-	heroes_root.visible = visible and not start_selection_active
+	heroes_root.visible = visible and not start_selection_active and not start_screen_active
 	enemies_root.visible = visible
 	projectiles_root.visible = visible
 
@@ -1269,12 +1425,20 @@ func _collect_attack_unlock_priority(tank_alive: bool, ranger_alive: bool, rogue
 	var priority: Array[int] = []
 	if int(upgrade_levels.get(UPGRADE_HALO_SPECTER, 0)) <= 0:
 		priority.append(UPGRADE_HALO_SPECTER)
+	elif spectral_halo_count < SPECTRAL_HALO_MAX_COUNT and int(upgrade_levels.get(UPGRADE_HALO_ECHO, 0)) <= 0:
+		priority.append(UPGRADE_HALO_ECHO)
 	if tank_alive and int(upgrade_levels.get(UPGRADE_TANK_HEAVY_ATTACK, 0)) <= 0:
 		priority.append(UPGRADE_TANK_HEAVY_ATTACK)
+	elif tank_alive and int(upgrade_levels.get(UPGRADE_TANK_HEAVY_ATTACK_PLUS, 0)) <= 0:
+		priority.append(UPGRADE_TANK_HEAVY_ATTACK_PLUS)
 	if ranger_alive and int(upgrade_levels.get(UPGRADE_RANGER_TRIPLE_ARROWS, 0)) <= 0:
 		priority.append(UPGRADE_RANGER_TRIPLE_ARROWS)
+	elif ranger_alive and int(upgrade_levels.get(UPGRADE_RANGER_TRIPLE_ARROWS_PLUS, 0)) <= 0:
+		priority.append(UPGRADE_RANGER_TRIPLE_ARROWS_PLUS)
 	if rogue_alive and int(upgrade_levels.get(UPGRADE_ROGUE_TWIN_FANGS, 0)) <= 0:
 		priority.append(UPGRADE_ROGUE_TWIN_FANGS)
+	elif rogue_alive and int(upgrade_levels.get(UPGRADE_ROGUE_TWIN_FANGS_PLUS, 0)) <= 0:
+		priority.append(UPGRADE_ROGUE_TWIN_FANGS_PLUS)
 	return priority
 
 func _roll_upgrade_choices() -> Array[int]:
@@ -1290,24 +1454,32 @@ func _roll_upgrade_choices() -> Array[int]:
 	pool.append(UPGRADE_TEAM_TRAINING)
 	if int(upgrade_levels.get(UPGRADE_HALO_SPECTER, 0)) <= 0:
 		pool.append(UPGRADE_HALO_SPECTER)
+	elif spectral_halo_count < SPECTRAL_HALO_MAX_COUNT:
+		pool.append(UPGRADE_HALO_ECHO)
 
 	if tank_alive:
 		pool.append(UPGRADE_TANK_BASTION)
 		pool.append(UPGRADE_TANK_MARCH)
 		if int(upgrade_levels.get(UPGRADE_TANK_HEAVY_ATTACK, 0)) <= 0:
 			pool.append(UPGRADE_TANK_HEAVY_ATTACK)
+		else:
+			pool.append(UPGRADE_TANK_HEAVY_ATTACK_PLUS)
 
 	if ranger_alive:
 		pool.append(UPGRADE_RANGER_REMEDY)
 		pool.append(UPGRADE_RANGER_FOCUS)
 		if int(upgrade_levels.get(UPGRADE_RANGER_TRIPLE_ARROWS, 0)) <= 0:
 			pool.append(UPGRADE_RANGER_TRIPLE_ARROWS)
+		else:
+			pool.append(UPGRADE_RANGER_TRIPLE_ARROWS_PLUS)
 
 	if rogue_alive:
 		pool.append(UPGRADE_ROGUE_OVERDRIVE)
 		pool.append(UPGRADE_ROGUE_PRECISION)
 		if int(upgrade_levels.get(UPGRADE_ROGUE_TWIN_FANGS, 0)) <= 0:
 			pool.append(UPGRADE_ROGUE_TWIN_FANGS)
+		else:
+			pool.append(UPGRADE_ROGUE_TWIN_FANGS_PLUS)
 
 	if pool.is_empty():
 		return []
@@ -1358,6 +1530,60 @@ func _starting_hero_slot_rect(slot: int) -> Rect2:
 	var y: float = view_size.y * 0.32
 	return Rect2(Vector2(start_x + float(slot) * (width + gap), y), Vector2(width, height))
 
+func _start_screen_button_rect() -> Rect2:
+	var view_size: Vector2 = _viewport_size()
+	return Rect2(
+		Vector2((view_size.x - START_SCREEN_BUTTON_SIZE.x) * 0.5, view_size.y * 0.58),
+		START_SCREEN_BUTTON_SIZE
+	)
+
+func _game_over_button_rect() -> Rect2:
+	var view_size: Vector2 = _viewport_size()
+	var panel: Rect2 = Rect2((view_size - GAME_OVER_PANEL_SIZE) * 0.5, GAME_OVER_PANEL_SIZE)
+	return Rect2(
+		Vector2((view_size.x - GAME_OVER_BUTTON_SIZE.x) * 0.5, panel.position.y + 214.0),
+		GAME_OVER_BUTTON_SIZE
+	)
+
+func _pause_resume_button_rect() -> Rect2:
+	var view_size: Vector2 = _viewport_size()
+	var panel: Rect2 = Rect2((view_size - PAUSE_PANEL_SIZE) * 0.5, PAUSE_PANEL_SIZE)
+	return Rect2(
+		Vector2((view_size.x - PAUSE_BUTTON_SIZE.x) * 0.5, panel.position.y + 132.0),
+		PAUSE_BUTTON_SIZE
+	)
+
+func _pause_home_button_rect() -> Rect2:
+	var view_size: Vector2 = _viewport_size()
+	var panel: Rect2 = Rect2((view_size - PAUSE_PANEL_SIZE) * 0.5, PAUSE_PANEL_SIZE)
+	return Rect2(
+		Vector2((view_size.x - PAUSE_BUTTON_SIZE.x) * 0.5, panel.position.y + 214.0),
+		PAUSE_BUTTON_SIZE
+	)
+
+func _open_starting_hero_menu() -> void:
+	start_screen_active = false
+	start_selection_active = true
+	pause_menu_active = false
+	game_over = false
+	_set_world_visible_for_upgrade(false)
+	_sync_halo_state()
+
+func _open_pause_menu() -> void:
+	pause_menu_active = true
+	heroes_root.visible = false
+	enemies_root.visible = false
+	projectiles_root.visible = false
+
+func _resume_from_pause() -> void:
+	pause_menu_active = false
+	heroes_root.visible = true
+	enemies_root.visible = true
+	projectiles_root.visible = true
+
+func _return_to_main_menu() -> void:
+	get_tree().reload_current_scene()
+
 func _choose_starting_hero_from_point(screen_point: Vector2) -> void:
 	if not start_selection_active:
 		return
@@ -1375,6 +1601,7 @@ func _choose_starting_hero(index: int) -> void:
 		return
 
 	start_selection_active = false
+	pause_menu_active = false
 	heroes_root.visible = true
 	halo_equipped = false
 	halo_charge = halo_charge_cap
@@ -1394,7 +1621,7 @@ func _upgrade_slot_rect(slot: int) -> Rect2:
 	return Rect2(Vector2(start_x + float(slot) * (width + gap), y), Vector2(width, height))
 
 func _camera_target_position() -> Vector2:
-	if start_selection_active:
+	if start_selection_active or start_screen_active:
 		return arena_rect.get_center()
 
 	if halo_index >= 0 and halo_index < heroes.size() and heroes[halo_index].health > 0.0:
@@ -1416,7 +1643,7 @@ func _update_camera(delta: float) -> void:
 	var target: Vector2 = _camera_target_position()
 	var follow_t: float = clampf(CAMERA_FOLLOW_SMOOTH * delta, 0.0, 1.0)
 	world_camera.position = world_camera.position.lerp(target, follow_t)
-	var target_zoom: Vector2 = CAMERA_ZOOM_MENU if start_selection_active else CAMERA_ZOOM_GAME
+	var target_zoom: Vector2 = CAMERA_ZOOM_MENU if (start_selection_active or start_screen_active) else CAMERA_ZOOM_GAME
 	var zoom_t: float = clampf(CAMERA_ZOOM_SMOOTH * delta, 0.0, 1.0)
 	world_camera.zoom = world_camera.zoom.lerp(target_zoom, zoom_t)
 	_update_camera_shake(delta)
@@ -1571,6 +1798,25 @@ func _wrap_text_lines(text: String, max_chars_per_line: int, max_lines: int) -> 
 
 	return lines
 
+func _fit_font_size_for_text(font: Font, text: String, max_width: float, preferred_size: int, min_size: int = 12) -> int:
+	if font == null:
+		return preferred_size
+	var size: int = preferred_size
+	var width_limit: float = maxf(max_width, 8.0)
+	while size > min_size:
+		var measured: Vector2 = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, size)
+		if measured.x <= width_limit:
+			break
+		size -= 1
+	return maxi(size, min_size)
+
+func _centered_text_baseline(rect: Rect2, font: Font, font_size: int) -> float:
+	if font == null:
+		return rect.position.y + rect.size.y * 0.5
+	var ascent: float = font.get_ascent(font_size)
+	var descent: float = font.get_descent(font_size)
+	return rect.position.y + (rect.size.y + ascent - descent) * 0.5
+
 func _choose_upgrade_from_point(point: Vector2) -> void:
 	if not upgrade_phase_active:
 		return
@@ -1667,9 +1913,33 @@ func _apply_upgrade(upgrade_id: int) -> void:
 					hero.attack_cooldown = maxf(0.54, hero.attack_cooldown * 0.96)
 		UPGRADE_HALO_SPECTER:
 			spectral_halo_unlocked = true
-			spectral_halo_position = _camera_target_position()
-			spectral_halo_velocity = Vector2.RIGHT.rotated(randf() * TAU) * SPECTRAL_HALO_SPEED
-			spectral_halo_hit_timer = 0.08
+			spectral_halo_count = maxi(1, spectral_halo_count)
+			_ensure_spectral_halo_slots()
+			if not spectral_halo_positions.is_empty():
+				spectral_halo_positions[0] = _clamp_point_to_arena(_camera_target_position())
+				spectral_halo_hit_timers[0] = 0.08
+		UPGRADE_HALO_ECHO:
+			if spectral_halo_unlocked:
+				spectral_halo_count = mini(SPECTRAL_HALO_MAX_COUNT, spectral_halo_count + 1)
+				_add_spectral_halo_slot(_camera_target_position() + Vector2(randf_range(-44.0, 44.0), randf_range(-44.0, 44.0)))
+				_ensure_spectral_halo_slots()
+		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
+			for hero: Hero in heroes:
+				if hero.kind == HERO_ROGUE and hero.rogue_dual_strike_unlocked:
+					hero.attack_damage += 1.35
+					hero.attack_cooldown = maxf(0.16, hero.attack_cooldown * 0.92)
+					hero.rogue_halo_damage_bonus_mult += 0.06
+		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
+			for hero: Hero in heroes:
+				if hero.kind == HERO_KNIGHT and hero.tank_heavy_attack_unlocked:
+					hero.attack_damage += 1.8
+					hero.attack_cooldown = maxf(0.52, hero.attack_cooldown * 0.95)
+					hero.add_max_health(12.0)
+		UPGRADE_RANGER_TRIPLE_ARROWS_PLUS:
+			for hero: Hero in heroes:
+				if hero.kind == HERO_RANGER and hero.ranger_triple_arrows_unlocked:
+					hero.attack_damage += 1.25
+					hero.attack_cooldown = maxf(0.48, hero.attack_cooldown * 0.92)
 
 	upgrade_levels[upgrade_id] = int(upgrade_levels.get(upgrade_id, 0)) + 1
 	upgrades_taken += 1
@@ -1706,6 +1976,14 @@ func _upgrade_name(upgrade_id: int) -> String:
 			return "Triple Arrows"
 		UPGRADE_HALO_SPECTER:
 			return "Spectral Halo"
+		UPGRADE_HALO_ECHO:
+			return "+1 Halo"
+		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
+			return "Twin Fangs+"
+		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
+			return "Heavy Attack+"
+		UPGRADE_RANGER_TRIPLE_ARROWS_PLUS:
+			return "Triple Arrows+"
 	return "Unknown"
 
 func _upgrade_description(upgrade_id: int) -> String:
@@ -1739,8 +2017,19 @@ func _upgrade_description(upgrade_id: int) -> String:
 		UPGRADE_RANGER_TRIPLE_ARROWS:
 			return "Unlock Ranger triple-shot: fires 3 arrows at once."
 		UPGRADE_HALO_SPECTER:
-			return "Summon a spectral halo that bounces around and auto-fires at enemies."
+			return "Summon a spectral halo that bounces around and hits enemies on contact."
+		UPGRADE_HALO_ECHO:
+			return "Add another bouncing halo (up to %d total)." % [SPECTRAL_HALO_MAX_COUNT]
+		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
+			return "Twin Fangs upgrade: stronger dual strikes and faster rogue attacks."
+		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
+			return "Heavy Attack upgrade: stronger slams, faster cadence, bonus tank HP."
+		UPGRADE_RANGER_TRIPLE_ARROWS_PLUS:
+			return "Triple Arrows upgrade: stronger volleys and faster ranger attacks."
 	return ""
+
+func _is_boss_reward_upgrade(upgrade_id: int) -> bool:
+	return upgrade_id == UPGRADE_GOLDEN_SURGE
 
 func _update_ui() -> void:
 	var view_size: Vector2 = _viewport_size()
@@ -1753,7 +2042,14 @@ func _update_ui() -> void:
 	wave_label.position = Vector2(view_size.x - 260.0, view_size.y - 56.0)
 	wave_label.size = Vector2(240.0, 42.0)
 
-	if start_selection_active:
+	if start_selection_active or start_screen_active or game_over:
+		wave_label.text = ""
+		threat_label.text = ""
+		hero_status.text = ""
+		hint_label.text = ""
+		return
+
+	if pause_menu_active:
 		wave_label.text = ""
 		threat_label.text = ""
 		hero_status.text = ""
@@ -1781,7 +2077,7 @@ func _update_ui() -> void:
 		else:
 			status_line = "Ready."
 	if game_over:
-		status_line = "All heroes are down. Press R or Enter to restart."
+		status_line = ""
 	elif upgrade_phase_active:
 		status_line = "Choose one upgrade to continue."
 	elif waiting_for_next_wave:
@@ -1976,35 +2272,34 @@ func _draw_floor_pattern(view_rect: Rect2) -> void:
 		var tex_w: float = float(floor_texture.get_width())
 		var tex_h: float = float(floor_texture.get_height())
 		if tex_w > 0.0 and tex_h > 0.0:
-			# Fill the arena with repeated floor tiles so walking always reveals more floor.
+			# Hybrid floor:
+			# 1) repeat a non-center pattern tile across arena
+			# 2) place one centered medallion texture in the middle
 			draw_rect(arena_rect, Color(0.06, 0.1, 0.14, 0.95), true)
+
+			var src_tile_w: float = maxf(16.0, tex_w * FLOOR_TEXTURE_REPEAT_SRC_FRACTION)
+			var src_tile_h: float = maxf(16.0, tex_h * FLOOR_TEXTURE_REPEAT_SRC_FRACTION)
+			var src_tile_rect: Rect2 = Rect2(
+				Vector2(FLOOR_TEXTURE_REPEAT_SRC_INSET, FLOOR_TEXTURE_REPEAT_SRC_INSET),
+				Vector2(src_tile_w, src_tile_h)
+			)
 			var tile_size: float = FLOOR_TEXTURE_TILE_WORLD_SIZE
-			var start_x: float = floor((visible.position.x - arena_rect.position.x) / tile_size) * tile_size + arena_rect.position.x
-			var start_y: float = floor((visible.position.y - arena_rect.position.y) / tile_size) * tile_size + arena_rect.position.y
+			# Anchor repeat grid at arena center so outer pattern lines up with centered medallion.
+			var grid_anchor: Vector2 = arena_rect.get_center()
+			var start_x: float = floor((visible.position.x - grid_anchor.x) / tile_size) * tile_size + grid_anchor.x
+			var start_y: float = floor((visible.position.y - grid_anchor.y) / tile_size) * tile_size + grid_anchor.y
 			var end_x: float = minf(visible.end.x + tile_size, arena_rect.end.x + tile_size)
 			var end_y: float = minf(visible.end.y + tile_size, arena_rect.end.y + tile_size)
-			var src_rect_full: Rect2 = Rect2(Vector2.ZERO, Vector2(tex_w, tex_h))
 			for y in range(int(start_y), int(end_y), int(tile_size)):
 				for x in range(int(start_x), int(end_x), int(tile_size)):
 					var tile_rect: Rect2 = Rect2(Vector2(float(x), float(y)), Vector2(tile_size, tile_size))
-					draw_texture_rect_region(floor_texture, tile_rect, src_rect_full, Color(0.56, 0.66, 0.8, 0.42), false, true)
+					draw_texture_rect_region(floor_texture, tile_rect, src_tile_rect, Color(0.74, 0.84, 0.96, 0.78), false, true)
 
-			# Keep a stronger center medallion accent.
-			var coverage: float = FLOOR_TEXTURE_CENTER_COVERAGE
-			if OS.has_feature("web"):
-				coverage *= FLOOR_TEXTURE_WEB_COVERAGE_MULT
-			var max_h: float = arena_rect.size.y * coverage
-			var draw_h: float = max_h
-			var draw_w: float = draw_h * (tex_w / maxf(tex_h, 0.001))
-			var max_w: float = arena_rect.size.x * 0.94
-			if draw_w > max_w:
-				draw_w = max_w
-				draw_h = draw_w * (tex_h / maxf(tex_w, 0.001))
-			var draw_rect_tex: Rect2 = Rect2(
-				arena_rect.get_center() - Vector2(draw_w * 0.5, draw_h * 0.5),
-				Vector2(draw_w, draw_h)
-			)
-			draw_texture_rect_region(floor_texture, draw_rect_tex, src_rect_full, Color(0.8, 0.9, 1.0, 0.84), false, true)
+			var src_rect_full: Rect2 = Rect2(Vector2.ZERO, Vector2(tex_w, tex_h))
+			var center_size: Vector2 = Vector2(FLOOR_TEXTURE_CENTER_WORLD_SIZE, FLOOR_TEXTURE_CENTER_WORLD_SIZE)
+			var center_rect: Rect2 = Rect2(arena_rect.get_center() - center_size * 0.5, center_size)
+			draw_texture_rect_region(floor_texture, center_rect, src_rect_full, Color(0.9, 0.96, 1.0, FLOOR_TEXTURE_CENTER_ALPHA), false, true)
+
 			draw_rect(arena_rect, Color(0.02, 0.04, 0.07, 0.14), true)
 			return
 
@@ -2104,6 +2399,36 @@ func _draw_atmospheric_lighting(view_rect: Rect2) -> void:
 
 func _draw() -> void:
 	var view_rect: Rect2 = _viewport_rect_world()
+
+	if start_screen_active:
+		_draw_start_menu_backdrop(view_rect)
+		draw_rect(view_rect, Color(0.01, 0.03, 0.07, 0.08), true)
+		var card_font: Font = hero_status.get_theme_font("font")
+		if card_font == null:
+			card_font = ThemeDB.fallback_font
+		var title_font: Font = start_menu_title_font if start_menu_title_font != null else card_font
+		var title_size: int = 74 if start_menu_title_font != null else 46
+		var title_text: String = "Halo Keepers"
+		var title_y: float = view_rect.position.y + view_rect.size.y * 0.31
+		# Layered shadow passes to separate title from the busy backdrop.
+		draw_string(title_font, Vector2(view_rect.position.x + 6.0, title_y + 8.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(title_font, Vector2(view_rect.position.x + 3.0, title_y + 5.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.78))
+		draw_string(title_font, Vector2(view_rect.position.x + 1.0, title_y + 2.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.52))
+		draw_string(title_font, Vector2(view_rect.position.x, title_y), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.95, 0.83, 0.58, 0.98))
+
+		var button_rect_screen: Rect2 = _start_screen_button_rect()
+		var hover_screen: Vector2 = get_viewport().get_mouse_position()
+		var is_hover: bool = button_rect_screen.has_point(hover_screen)
+		var button_rect: Rect2 = _screen_rect_to_world(button_rect_screen)
+		draw_rect(button_rect, Color(0.14, 0.2, 0.31, 0.96) if not is_hover else Color(0.2, 0.28, 0.4, 0.98), true)
+		draw_rect(button_rect, Color(0.92, 0.97, 1.0, 0.86), false, 2.2)
+		var start_label: String = "START GAME"
+		var start_size: int = _fit_font_size_for_text(card_font, start_label, button_rect.size.x - 26.0, 32, 18)
+		var start_base_y: float = _centered_text_baseline(button_rect, card_font, start_size)
+		draw_string(card_font, Vector2(button_rect.position.x + 2.0, start_base_y + 2.0), start_label, HORIZONTAL_ALIGNMENT_CENTER, button_rect.size.x, start_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(card_font, Vector2(button_rect.position.x, start_base_y), start_label, HORIZONTAL_ALIGNMENT_CENTER, button_rect.size.x, start_size, Color(0.98, 0.99, 1.0, 0.98))
+		draw_string(card_font, Vector2(view_rect.position.x, button_rect.end.y + 34.0), "Press ENTER or click Start", HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, 20, Color(0.84, 0.92, 1.0, 0.8))
+		return
 
 	if start_selection_active:
 		_draw_start_menu_backdrop(view_rect)
@@ -2274,19 +2599,110 @@ func _draw() -> void:
 			var rect: Rect2 = _screen_rect_to_world(rect_screen)
 			var base_color: Color = Color(0.12, 0.18, 0.26, 0.94)
 			var text_color: Color = Color(0.9, 0.95, 1.0, 0.95)
+			var border_color: Color = Color(0.9, 0.95, 1.0, 0.72)
+			if _is_boss_reward_upgrade(upgrade_id):
+				base_color = Color(0.28, 0.21, 0.07, 0.96)
+				text_color = Color(1.0, 0.94, 0.72, 0.98)
+				border_color = Color(1.0, 0.86, 0.42, 0.92)
 			if is_hover:
-				base_color = Color(0.2, 0.28, 0.38, 0.98)
-				text_color = Color(1.0, 1.0, 1.0, 1.0)
+				if _is_boss_reward_upgrade(upgrade_id):
+					base_color = Color(0.35, 0.27, 0.09, 0.99)
+					text_color = Color(1.0, 0.98, 0.9, 1.0)
+					border_color = Color(1.0, 0.93, 0.62, 0.98)
+				else:
+					base_color = Color(0.2, 0.28, 0.38, 0.98)
+					text_color = Color(1.0, 1.0, 1.0, 1.0)
 			draw_rect(rect, base_color, true)
-			draw_rect(rect, Color(0.9, 0.95, 1.0, 0.72), false, 2.0)
+			draw_rect(rect, border_color, false, 2.0)
 			draw_string(card_font, rect.position + Vector2(14.0, 30.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24.0, 19, text_color)
 			var y: float = 56.0
 			for line: String in desc_lines:
 				draw_string(card_font, rect.position + Vector2(14.0, y), line, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24.0, 15, Color(text_color.r, text_color.g, text_color.b, 0.92))
 				y += 18.0
+			if _is_boss_reward_upgrade(upgrade_id):
+				draw_string(card_font, rect.position + Vector2(14.0, rect.size.y - 10.0), "BOSS REWARD", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24.0, 13, Color(1.0, 0.88, 0.5, 0.95))
+
+	if game_over:
+		draw_rect(view_rect, Color(0.0, 0.0, 0.0, 0.62), true)
+		var card_font: Font = hero_status.get_theme_font("font")
+		if card_font == null:
+			card_font = ThemeDB.fallback_font
+		var title_font: Font = start_menu_title_font if start_menu_title_font != null else card_font
+		var button_font: Font = hud_font if hud_font != null else card_font
+		var panel_screen: Rect2 = Rect2((_viewport_size() - GAME_OVER_PANEL_SIZE) * 0.5, GAME_OVER_PANEL_SIZE)
+		var panel: Rect2 = _screen_rect_to_world(panel_screen)
+		draw_rect(panel, Color(0.03, 0.05, 0.09, 0.78), true)
+		draw_rect(panel.grow(-6.0), Color(0.01, 0.02, 0.05, 0.52), true)
+		draw_rect(panel, Color(0.9, 0.95, 1.0, 0.32), false, 2.2)
+		var title_y: float = panel.position.y + 74.0
+		draw_string(title_font, Vector2(panel.position.x + 4.0, title_y + 5.0), "GAME OVER", HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, 66, Color(0.0, 0.0, 0.0, 0.78))
+		draw_string(title_font, Vector2(panel.position.x, title_y), "GAME OVER", HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, 66, Color(0.94, 0.44, 0.42, 0.98))
+		var summary_text: String = "You reached Wave %d in %.1fs" % [wave, elapsed_time]
+		var summary_size: int = _fit_font_size_for_text(card_font, summary_text, panel.size.x - 26.0, 23, 14)
+		var summary_rect: Rect2 = Rect2(panel.position + Vector2(0.0, 106.0), Vector2(panel.size.x, 34.0))
+		var summary_base_y: float = _centered_text_baseline(summary_rect, card_font, summary_size)
+		draw_string(card_font, Vector2(panel.position.x, summary_base_y), summary_text, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, summary_size, Color(0.92, 0.96, 1.0, 0.94))
+
+		var menu_button_screen: Rect2 = _game_over_button_rect()
+		var hover_screen: Vector2 = get_viewport().get_mouse_position()
+		var is_hover: bool = menu_button_screen.has_point(hover_screen)
+		var menu_button: Rect2 = _screen_rect_to_world(menu_button_screen)
+		draw_rect(menu_button, Color(0.15, 0.2, 0.3, 0.96) if not is_hover else Color(0.22, 0.29, 0.4, 0.98), true)
+		draw_rect(menu_button, Color(0.9, 0.95, 1.0, 0.82), false, 2.2)
+		var gameover_label: String = "RETURN TO HOME"
+		var gameover_size: int = _fit_font_size_for_text(button_font, gameover_label, menu_button.size.x - 24.0, 22, 14)
+		var gameover_base_y: float = _centered_text_baseline(menu_button, button_font, gameover_size)
+		draw_string(button_font, Vector2(menu_button.position.x + 2.0, gameover_base_y + 2.0), gameover_label, HORIZONTAL_ALIGNMENT_CENTER, menu_button.size.x, gameover_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(button_font, Vector2(menu_button.position.x, gameover_base_y), gameover_label, HORIZONTAL_ALIGNMENT_CENTER, menu_button.size.x, gameover_size, Color(0.96, 0.99, 1.0, 0.98))
+		return
+
+	if pause_menu_active:
+		draw_rect(view_rect, Color(0.0, 0.0, 0.0, 0.58), true)
+		var card_font: Font = hero_status.get_theme_font("font")
+		if card_font == null:
+			card_font = ThemeDB.fallback_font
+		var title_font: Font = start_menu_title_font if start_menu_title_font != null else card_font
+		var button_font: Font = hud_font if hud_font != null else card_font
+		var panel_screen: Rect2 = Rect2((_viewport_size() - PAUSE_PANEL_SIZE) * 0.5, PAUSE_PANEL_SIZE)
+		var panel: Rect2 = _screen_rect_to_world(panel_screen)
+		draw_rect(panel, Color(0.03, 0.06, 0.1, 0.76), true)
+		draw_rect(panel.grow(-6.0), Color(0.01, 0.03, 0.06, 0.5), true)
+		draw_rect(panel, Color(0.9, 0.95, 1.0, 0.32), false, 2.2)
+
+		var title_y: float = panel.position.y + 68.0
+		draw_string(title_font, Vector2(panel.position.x + 4.0, title_y + 5.0), "PAUSED", HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, 62, Color(0.0, 0.0, 0.0, 0.78))
+		draw_string(title_font, Vector2(panel.position.x, title_y), "PAUSED", HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, 62, Color(0.96, 0.86, 0.62, 0.98))
+
+		var hover_screen: Vector2 = get_viewport().get_mouse_position()
+		var resume_screen: Rect2 = _pause_resume_button_rect()
+		var resume_hover: bool = resume_screen.has_point(hover_screen)
+		var resume_rect: Rect2 = _screen_rect_to_world(resume_screen)
+		draw_rect(resume_rect, Color(0.15, 0.22, 0.34, 0.96) if not resume_hover else Color(0.22, 0.31, 0.45, 0.98), true)
+		draw_rect(resume_rect, Color(0.9, 0.95, 1.0, 0.82), false, 2.2)
+		var resume_label: String = "RESUME"
+		var resume_size: int = _fit_font_size_for_text(button_font, resume_label, resume_rect.size.x - 24.0, 25, 14)
+		var resume_base_y: float = _centered_text_baseline(resume_rect, button_font, resume_size)
+		draw_string(button_font, Vector2(resume_rect.position.x + 2.0, resume_base_y + 2.0), resume_label, HORIZONTAL_ALIGNMENT_CENTER, resume_rect.size.x, resume_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(button_font, Vector2(resume_rect.position.x, resume_base_y), resume_label, HORIZONTAL_ALIGNMENT_CENTER, resume_rect.size.x, resume_size, Color(0.96, 0.99, 1.0, 0.98))
+
+		var home_screen: Rect2 = _pause_home_button_rect()
+		var home_hover: bool = home_screen.has_point(hover_screen)
+		var home_rect: Rect2 = _screen_rect_to_world(home_screen)
+		draw_rect(home_rect, Color(0.15, 0.21, 0.3, 0.96) if not home_hover else Color(0.23, 0.3, 0.4, 0.98), true)
+		draw_rect(home_rect, Color(0.9, 0.95, 1.0, 0.82), false, 2.2)
+		var home_label: String = "RETURN TO HOME"
+		var home_size: int = _fit_font_size_for_text(button_font, home_label, home_rect.size.x - 24.0, 22, 14)
+		var home_base_y: float = _centered_text_baseline(home_rect, button_font, home_size)
+		draw_string(button_font, Vector2(home_rect.position.x + 2.0, home_base_y + 2.0), home_label, HORIZONTAL_ALIGNMENT_CENTER, home_rect.size.x, home_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(button_font, Vector2(home_rect.position.x, home_base_y), home_label, HORIZONTAL_ALIGNMENT_CENTER, home_rect.size.x, home_size, Color(0.96, 0.99, 1.0, 0.98))
+		var helper_text: String = "Press ESC to resume"
+		var helper_size: int = _fit_font_size_for_text(card_font, helper_text, panel.size.x - 20.0, 18, 13)
+		var helper_y: float = minf(view_rect.end.y - 16.0, home_rect.end.y + 30.0)
+		draw_string(card_font, Vector2(panel.position.x, helper_y), helper_text, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, helper_size, Color(0.84, 0.92, 1.0, 0.86))
+		return
 
 func _draw_team_power_overlay() -> void:
-	if start_selection_active or upgrade_phase_active or heroes.is_empty():
+	if start_selection_active or start_screen_active or pause_menu_active or upgrade_phase_active or game_over or heroes.is_empty():
 		return
 
 	_draw_team_links()
@@ -2325,40 +2741,65 @@ func _draw_team_links() -> void:
 func _draw_power_circle() -> void:
 	if team_power_center == Vector2.ZERO:
 		return
-	var pulse: float = 1.0 + sin(float(Time.get_ticks_msec()) * 0.0032) * (0.03 + team_power * 0.08)
-	var r: float = team_power_radius * pulse
-	var line_alpha: float = 0.12 + team_power * 0.72
-	var outer_line_alpha: float = clampf(line_alpha * 0.58, 0.0, 1.0)
-	var fill_alpha: float = 0.02 + team_power * 0.1
-	var width: float = 1.8 + team_power * 5.0
+	var now: float = float(Time.get_ticks_msec())
+	# Gentle pulse so it feels alive without drawing too much attention.
+	var breathe: float = 1.0 + sin(now * 0.0014) * (0.012 + team_power * 0.018)
+	var r: float = team_power_radius * breathe
+	var line_alpha: float = 0.045 + team_power * 0.17
+	var outer_line_alpha: float = clampf(line_alpha * 0.78, 0.0, 0.26)
+	var fill_alpha: float = 0.008 + team_power * 0.025
+	var width: float = 1.0 + team_power * 1.9
 	if perfect_position_active:
-		var perfect_breathe: float = 1.0 + sin(float(Time.get_ticks_msec()) * 0.0044) * 0.09
+		var perfect_breathe: float = 1.0 + sin(now * 0.0019) * (0.014 + team_power * 0.02)
 		r *= perfect_breathe
-		width *= 1.34
-		fill_alpha = minf(0.34, fill_alpha + 0.11)
-		outer_line_alpha = minf(0.98, outer_line_alpha + 0.26)
+		width *= 1.15
+		fill_alpha = minf(0.08, fill_alpha + 0.018)
+		outer_line_alpha = minf(0.34, outer_line_alpha + 0.08)
 	if perfect_position_feedback_timer > 0.0:
 		var cue_t: float = perfect_position_feedback_timer / PERFECT_POSITION_FEEDBACK_DURATION
-		draw_arc(team_power_center, r + (1.0 - cue_t) * 26.0, 0.0, TAU, 64, Color(1.0, 0.96, 0.72, 0.55 * cue_t), 3.6 * cue_t + 1.2)
-		draw_circle(team_power_center, r * 0.52 + (1.0 - cue_t) * 16.0, Color(1.0, 0.94, 0.66, 0.14 * cue_t))
+		draw_arc(team_power_center, r + (1.0 - cue_t) * 18.0, 0.0, TAU, 52, Color(1.0, 0.96, 0.72, 0.18 * cue_t), 1.8 * cue_t + 0.6)
+		draw_circle(team_power_center, r * 0.52 + (1.0 - cue_t) * 10.0, Color(1.0, 0.94, 0.66, 0.045 * cue_t))
 
 	draw_circle(team_power_center, r, Color(0.78, 0.95, 1.0, fill_alpha))
-	draw_arc(team_power_center, r, 0.0, TAU, 56, Color(0.92, 0.98, 1.0, outer_line_alpha), width)
-	var inner_alpha: float = 0.14 + team_power * 0.18
-	var inner_width: float = 1.5 + team_power * 1.8
+	# Use a dotted outer trace to avoid arc seam artifacts entirely.
+	var outer_trace_points: int = 40
+	for i in range(outer_trace_points):
+		var a: float = TAU * float(i) / float(outer_trace_points)
+		var p_trace: Vector2 = team_power_center + Vector2.RIGHT.rotated(a) * r
+		draw_circle(p_trace, 0.65 + team_power * 0.45, Color(0.92, 0.98, 1.0, outer_line_alpha * 0.9))
+
+	var spin_angle: float = now * 0.0004 * (0.9 + team_power * 0.6)
+	# Spin cue with soft moving beacons instead of line sweeps (avoids seam/cap artifacts).
+	var beacon_a: Vector2 = team_power_center + Vector2.RIGHT.rotated(spin_angle) * r
+	var beacon_b: Vector2 = team_power_center + Vector2.RIGHT.rotated(spin_angle + PI * 0.92) * r
+	draw_circle(beacon_a, 2.0 + team_power * 0.9, Color(0.96, 0.99, 1.0, outer_line_alpha * 1.3))
+	draw_circle(beacon_a, 3.6 + team_power * 1.2, Color(0.9, 0.97, 1.0, outer_line_alpha * 0.26))
+	draw_circle(beacon_b, 1.6 + team_power * 0.75, Color(0.88, 0.95, 1.0, outer_line_alpha * 1.0))
+	draw_circle(beacon_b, 3.0 + team_power * 1.0, Color(0.84, 0.93, 1.0, outer_line_alpha * 0.2))
+	var inner_alpha: float = 0.055 + team_power * 0.14
+	var inner_width: float = 0.95 + team_power * 1.15
 	if perfect_position_active:
-		inner_alpha = minf(0.82, inner_alpha + 0.28)
-		inner_width += 1.2
+		inner_alpha = minf(0.32, inner_alpha + 0.095)
+		inner_width += 0.6
 	draw_arc(team_power_center, PERFECT_POSITION_RING_RADIUS, 0.0, TAU, 52, Color(0.72, 0.92, 1.0, inner_alpha), inner_width)
 
-	var spark_count: int = 10
-	for i in range(spark_count):
-		var phase: float = TAU * float(i) / float(spark_count)
-		var wobble: float = sin(float(Time.get_ticks_msec()) * 0.005 + float(i) * 1.2)
-		var sr: float = r + wobble * (3.0 + team_power * 6.0)
-		var angle: float = phase + float(Time.get_ticks_msec()) * 0.00055 * (1.0 + team_power)
+	var spark_count_outer: int = 12
+	for i in range(spark_count_outer):
+		var phase: float = TAU * float(i) / float(spark_count_outer)
+		var wobble: float = sin(now * 0.0016 + float(i) * 1.2)
+		var sr: float = r + wobble * (0.8 + team_power * 1.7)
+		var angle: float = phase + now * 0.00085 * (1.0 + team_power)
 		var p: Vector2 = team_power_center + Vector2.RIGHT.rotated(angle) * sr
-		draw_circle(p, 1.2 + team_power * 1.3, Color(0.94, 0.98, 1.0, 0.06 + team_power * 0.24))
+		draw_circle(p, 1.1 + team_power * 1.1, Color(0.94, 0.98, 1.0, 0.14 + team_power * 0.16))
+
+	var spark_count_inner: int = 10
+	for i in range(spark_count_inner):
+		var phase_inner: float = TAU * float(i) / float(spark_count_inner)
+		var wobble_inner: float = sin(now * 0.0014 + float(i) * 1.48)
+		var inner_r: float = PERFECT_POSITION_RING_RADIUS + wobble_inner * (0.7 + team_power * 1.8)
+		var angle_inner: float = phase_inner - now * 0.00062 * (0.9 + team_power * 0.8)
+		var p_inner: Vector2 = team_power_center + Vector2.RIGHT.rotated(angle_inner) * inner_r
+		draw_circle(p_inner, 1.0 + team_power * 0.95, Color(0.84, 0.95, 1.0, 0.16 + team_power * 0.14))
 
 func _draw_kill_flashes() -> void:
 	for flash: Dictionary in kill_flashes:
@@ -2387,10 +2828,17 @@ func _draw_kill_flashes() -> void:
 func _draw_spectral_halo() -> void:
 	if not spectral_halo_unlocked:
 		return
-	if start_selection_active:
+	if start_selection_active or start_screen_active or pause_menu_active or game_over:
 		return
-	var pulse: float = 1.0 + sin(float(Time.get_ticks_msec()) * 0.007) * 0.11
-	var r: float = SPECTRAL_HALO_RADIUS * pulse
-	draw_circle(spectral_halo_position, r + 5.0, Color(1.0, 0.94, 0.62, 0.14))
-	draw_circle(spectral_halo_position, r, Color(1.0, 0.93, 0.52, 0.24))
-	draw_arc(spectral_halo_position, r + 1.0, 0.0, TAU, 42, Color(1.0, 0.98, 0.72, 0.78), 2.2)
+	if spectral_halo_count <= 0:
+		return
+	_ensure_spectral_halo_slots()
+	var now: float = float(Time.get_ticks_msec())
+	for h in range(spectral_halo_count):
+		var halo_pos: Vector2 = spectral_halo_positions[h]
+		var phase: float = float(h) * 1.37
+		var pulse: float = 1.0 + sin(now * 0.007 + phase) * 0.11
+		var r: float = SPECTRAL_HALO_RADIUS * pulse
+		draw_circle(halo_pos, r + 5.0, Color(1.0, 0.94, 0.62, 0.14))
+		draw_circle(halo_pos, r, Color(1.0, 0.93, 0.52, 0.24))
+		draw_arc(halo_pos, r + 1.0, 0.0, TAU, 42, Color(1.0, 0.98, 0.72, 0.78), 2.2)

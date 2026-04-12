@@ -12,6 +12,7 @@ const ENEMY_SWARM := 0
 const ENEMY_RANGED := 1
 const ENEMY_ELITE := 2
 const ENEMY_BOSS := 3
+const ENEMY_FINAL_BOSS := 4
 
 const PROJECTILE_TEAM_HERO := 0
 
@@ -50,6 +51,10 @@ const HERO_CARD_FRAME_COUNT := 8
 const HERO_CARD_TANK_SHEET := "res://assets/heroes/tank_idle.png"
 const HERO_CARD_RANGER_SHEET := "res://assets/heroes/ranger_idle.png"
 const HERO_CARD_ROGUE_SHEET := "res://assets/heroes/rogue_idle.png"
+const START_CARD_TANK_CUSTOM_PATH := "res://assets/ui/select_cards/tank_selectscreen.png"
+const START_CARD_RANGER_CUSTOM_PATH := "res://assets/ui/select_cards/ranger_selectscreen.png"
+const UPGRADE_CARD_RANGER_REMEDY_PATH := "res://assets/ui/upgrade_cards/ranger_remedy.png"
+const UPGRADE_CARD_HALO_CONDUCTION_PATH := "res://assets/ui/upgrade_cards/halo_conduction.png"
 const START_MENU_TITLE_FONT_PATH := "res://assets/fonts/Starstruck.ttf"
 const UI_HUD_FONT_PATH := "res://assets/fonts/DEATHCROW.ttf"
 const UI_HUD_FONT_ALT_PATH := "res://assets/fonts/Mokgech-Regular.otf"
@@ -75,9 +80,9 @@ const CAMERA_ZOOM_MENU := Vector2(1.0, 1.0)
 const CAMERA_ZOOM_GAME := Vector2(1.22, 1.22)
 const CAMERA_ZOOM_SMOOTH := 8.5
 const WEB_LOW_SPEC_ENABLED := true
-const WAVE_BASE_ENEMIES := 30
-const WAVE_LINEAR_ENEMIES := 7
-const WAVE_SCALING_ENEMIES := 2.2
+const WAVE_BASE_ENEMIES := 32
+const WAVE_LINEAR_ENEMIES := 8
+const WAVE_SCALING_ENEMIES := 2.4
 const WAVE_BOSS_SUPPORT_BASE := 18
 const WAVE_BOSS_SUPPORT_PER_WAVE := 4
 const WAVE_SPAWN_INTERVAL_START := 0.43
@@ -117,11 +122,26 @@ const PERFECT_POSITION_SOUND_ENABLED := true
 const SFX_MIX_RATE := 32000.0
 const SFX_BUFFER_LENGTH := 0.16
 const SFX_MIN_INTERVAL := 0.035
+const BGM_PATH := "res://assets/audio/los_tres.mp3"
+const BGM_MENU_VOLUME_DB := -23.0
+const BGM_GAME_VOLUME_DB := -16.0
+const UI_CLICK_SFX_PATH := "res://assets/audio/single-beep_C_major.wav"
+const UI_START_CONFIRM_SFX_PATH := "res://assets/audio/end-level-beep_C_major.wav"
+const UI_CLICK_SFX_VOLUME_DB := -18.0
+const UI_START_CONFIRM_SFX_VOLUME_DB := -18.0
 const START_SCREEN_BUTTON_SIZE := Vector2(300.0, 72.0)
 const GAME_OVER_BUTTON_SIZE := Vector2(360.0, 72.0)
 const GAME_OVER_PANEL_SIZE := Vector2(560.0, 320.0)
 const PAUSE_PANEL_SIZE := Vector2(560.0, 320.0)
 const PAUSE_BUTTON_SIZE := Vector2(360.0, 68.0)
+const TUTORIAL_PANEL_SIZE := Vector2(920.0, 560.0)
+const TUTORIAL_BUTTON_SIZE := Vector2(420.0, 70.0)
+const TUTORIAL_PANEL_MARGIN_X := 54.0
+const TUTORIAL_PANEL_MARGIN_Y := 44.0
+const BOSS_VICTORY_PANEL_SIZE := Vector2(760.0, 420.0)
+const BOSS_VICTORY_BUTTON_SIZE := Vector2(300.0, 64.0)
+const BOSS_VICTORY_PANEL_MARGIN_X := 72.0
+const BOSS_VICTORY_PANEL_MARGIN_Y := 56.0
 
 @onready var heroes_root: Node2D = $Heroes
 @onready var enemies_root: Node2D = $Enemies
@@ -164,17 +184,22 @@ var spawn_remaining: int = 0
 var spawn_timer: float = 0.0
 var spawning: bool = false
 var boss_spawn_pending: bool = false
+var boss_spawn_kind: int = ENEMY_BOSS
 var waiting_for_next_wave: bool = false
 var intermission_timer: float = 0.0
 
 var game_over: bool = false
 var start_screen_active: bool = true
 var start_selection_active: bool = false
+var tutorial_screen_active: bool = false
 var pause_menu_active: bool = false
+var boss_victory_prompt_active: bool = false
 var upgrade_phase_active: bool = false
 var upgrade_choices: Array[int] = []
 var upgrade_levels: Dictionary = {}
 var last_upgrade_choices: Array[int] = []
+var final_boss_prompt_pending: bool = false
+var endless_cycle: int = 0
 
 var ranger_halo_heal_amount: float = 14.0
 var ranger_halo_heal_radius: float = 165.0
@@ -182,6 +207,10 @@ var knight_taunt_radius: float = 240.0
 var knight_pull_radius: float = 220.0
 var knight_guard_heal_per_sec: float = 4.0
 var start_card_frames: Dictionary = {}
+var start_card_tank_custom: Texture2D = null
+var start_card_ranger_custom: Texture2D = null
+var upgrade_card_ranger_remedy: Texture2D = null
+var upgrade_card_halo_conduction: Texture2D = null
 var start_menu_title_font: Font = null
 var hud_font: Font = null
 var lighting_root: Node2D = null
@@ -216,9 +245,14 @@ var spectral_halo_positions: Array[Vector2] = []
 var spectral_halo_velocities: Array[Vector2] = []
 var spectral_halo_hit_timers: Array[float] = []
 var spectral_halo_heal_timers: Array[float] = []
+var bgm_player: AudioStreamPlayer = null
 var sfx_player: AudioStreamPlayer = null
 var sfx_playback: AudioStreamGeneratorPlayback = null
 var sfx_cooldown_timer: float = 0.0
+var ui_click_player: AudioStreamPlayer = null
+var ui_start_confirm_player: AudioStreamPlayer = null
+var ui_click_stream: AudioStream = null
+var ui_start_confirm_stream: AudioStream = null
 
 func _ready() -> void:
 	randomize()
@@ -244,18 +278,23 @@ func _ready() -> void:
 
 	_spawn_heroes()
 	_load_start_card_textures()
+	_load_upgrade_card_textures()
 	start_menu_title_font = load(START_MENU_TITLE_FONT_PATH) as Font
 	hud_font = load(UI_HUD_FONT_PATH) as Font
 	if hud_font == null:
 		hud_font = load(UI_HUD_FONT_ALT_PATH) as Font
 	_configure_hud_style()
 	floor_texture = load(FLOOR_TEXTURE_PATH) as Texture2D
+	_setup_bgm()
+	_start_bgm_menu()
 	_setup_audio_sfx()
+	_setup_ui_sfx()
 	low_spec_mode = WEB_LOW_SPEC_ENABLED and OS.has_feature("web")
 	_setup_lighting_nodes()
 	heroes_root.visible = false
 	start_screen_active = true
 	start_selection_active = false
+	tutorial_screen_active = false
 	pause_menu_active = false
 	halo_index = -1
 	halo_equipped = false
@@ -322,6 +361,14 @@ func _process(delta: float) -> void:
 		queue_redraw()
 		return
 
+	if tutorial_screen_active:
+		_update_kill_flashes(delta)
+		_update_dynamic_lighting(delta)
+		_update_camera(delta)
+		_update_ui()
+		queue_redraw()
+		return
+
 	if start_selection_active:
 		_update_kill_flashes(delta)
 		_update_dynamic_lighting(delta)
@@ -331,6 +378,13 @@ func _process(delta: float) -> void:
 		return
 
 	if pause_menu_active:
+		_update_dynamic_lighting(delta)
+		_update_camera(delta)
+		_update_ui()
+		queue_redraw()
+		return
+
+	if boss_victory_prompt_active:
 		_update_dynamic_lighting(delta)
 		_update_camera(delta)
 		_update_ui()
@@ -388,20 +442,43 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
 			if pause_menu_active:
+				_play_ui_click_sfx()
 				_resume_from_pause()
 				return
-			if not start_screen_active and not start_selection_active and not game_over and not upgrade_phase_active:
+			if tutorial_screen_active:
+				_play_ui_click_sfx()
+				_open_start_screen()
+				return
+			if not start_screen_active and not start_selection_active and not tutorial_screen_active and not game_over and not upgrade_phase_active and not boss_victory_prompt_active:
+				_play_ui_click_sfx()
 				_open_pause_menu()
 				return
 
 		if start_screen_active and (event.keycode == KEY_ENTER or event.keycode == KEY_SPACE):
+			_play_ui_click_sfx()
+			_open_tutorial_screen()
+			return
+
+		if tutorial_screen_active and (event.keycode == KEY_ENTER or event.keycode == KEY_SPACE or event.keycode == KEY_C):
+			_play_ui_click_sfx()
 			_open_starting_hero_menu()
 			return
 
 		if pause_menu_active:
 			if event.keycode == KEY_ENTER or event.keycode == KEY_SPACE:
+				_play_ui_click_sfx()
 				_resume_from_pause()
 			elif event.keycode == KEY_H or event.keycode == KEY_M:
+				_play_ui_click_sfx()
+				_return_to_main_menu()
+			return
+
+		if boss_victory_prompt_active:
+			if event.keycode == KEY_ENTER or event.keycode == KEY_SPACE or event.keycode == KEY_C:
+				_play_ui_click_sfx()
+				_continue_after_main_boss()
+			elif event.keycode == KEY_H or event.keycode == KEY_M or event.keycode == KEY_ESCAPE:
+				_play_ui_click_sfx()
 				_return_to_main_menu()
 			return
 
@@ -416,6 +493,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 
 		if game_over and (event.keycode == KEY_ENTER or event.keycode == KEY_R or event.keycode == KEY_SPACE):
+			_play_ui_click_sfx()
 			_return_to_main_menu()
 			return
 
@@ -438,19 +516,39 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if start_screen_active:
 			if _start_screen_button_rect().has_point(event.position):
+				_play_ui_click_sfx()
+				_open_tutorial_screen()
+				return
+			return
+		if tutorial_screen_active:
+			if _tutorial_continue_button_rect().has_point(event.position):
+				_play_ui_click_sfx()
 				_open_starting_hero_menu()
 				return
 			return
 		if pause_menu_active:
 			if _pause_resume_button_rect().has_point(event.position):
+				_play_ui_click_sfx()
 				_resume_from_pause()
 				return
 			if _pause_home_button_rect().has_point(event.position):
+				_play_ui_click_sfx()
+				_return_to_main_menu()
+				return
+			return
+		if boss_victory_prompt_active:
+			if _boss_victory_continue_button_rect().has_point(event.position):
+				_play_ui_click_sfx()
+				_continue_after_main_boss()
+				return
+			if _boss_victory_home_button_rect().has_point(event.position):
+				_play_ui_click_sfx()
 				_return_to_main_menu()
 				return
 			return
 		if game_over:
 			if _game_over_button_rect().has_point(event.position):
+				_play_ui_click_sfx()
 				_return_to_main_menu()
 			return
 		if start_selection_active:
@@ -526,6 +624,20 @@ func _load_start_card_textures() -> void:
 	start_card_frames[HERO_KNIGHT] = _load_start_card_preview_frames(HERO_CARD_TANK_SHEET)
 	start_card_frames[HERO_RANGER] = _load_start_card_preview_frames(HERO_CARD_RANGER_SHEET)
 	start_card_frames[HERO_ROGUE] = _load_start_card_preview_frames(HERO_CARD_ROGUE_SHEET)
+	start_card_tank_custom = load(START_CARD_TANK_CUSTOM_PATH) as Texture2D
+	start_card_ranger_custom = load(START_CARD_RANGER_CUSTOM_PATH) as Texture2D
+
+func _load_upgrade_card_textures() -> void:
+	upgrade_card_ranger_remedy = load(UPGRADE_CARD_RANGER_REMEDY_PATH) as Texture2D
+	upgrade_card_halo_conduction = load(UPGRADE_CARD_HALO_CONDUCTION_PATH) as Texture2D
+
+func _custom_upgrade_card_texture(upgrade_id: int) -> Texture2D:
+	match upgrade_id:
+		UPGRADE_RANGER_REMEDY:
+			return upgrade_card_ranger_remedy
+		UPGRADE_HALO_FLOW:
+			return upgrade_card_halo_conduction
+	return null
 
 func _load_start_card_preview_frames(path: String) -> Array[Texture2D]:
 	var result: Array[Texture2D] = []
@@ -552,6 +664,17 @@ func _load_start_card_preview_frames(path: String) -> Array[Texture2D]:
 		frame_img.blit_rect(sheet_img, Rect2i(i * frame_w, 0, frame_w, frame_h), Vector2i.ZERO)
 		result.append(ImageTexture.create_from_image(frame_img))
 	return result
+
+func _draw_texture_fit(texture: Texture2D, rect: Rect2, modulate: Color = Color(1.0, 1.0, 1.0, 1.0)) -> void:
+	if texture == null:
+		return
+	var tex_size: Vector2 = texture.get_size()
+	if tex_size.x <= 0.0 or tex_size.y <= 0.0:
+		return
+	var scale: float = minf(rect.size.x / tex_size.x, rect.size.y / tex_size.y)
+	var draw_size: Vector2 = tex_size * scale
+	var draw_rect_fit: Rect2 = Rect2(rect.position + (rect.size - draw_size) * 0.5, draw_size)
+	draw_texture_rect(texture, draw_rect_fit, false, modulate)
 
 func _create_soft_light_texture(size: int, exponent: float) -> Texture2D:
 	var tex_size: int = max(16, size)
@@ -688,7 +811,7 @@ func _update_dynamic_lighting(_delta: float) -> void:
 		return
 
 	var t: float = float(Time.get_ticks_msec()) * 0.001
-	var in_start_menu: bool = start_selection_active or start_screen_active
+	var in_start_menu: bool = start_selection_active or start_screen_active or tutorial_screen_active
 	for i in range(min(top_glow_lights.size(), ATMOS_RAY_COUNT)):
 		var anchor: Vector2 = _top_light_anchor_position(i)
 		var pulse: float = 0.92 + 0.1 * sin(t * 1.3 + float(i) * 0.7)
@@ -759,7 +882,7 @@ func _update_dynamic_lighting(_delta: float) -> void:
 		var hl: PointLight2D = hero_lights[i]
 		hl.position = hero.global_position + Vector2(0.0, -2.0)
 
-		if start_selection_active or start_screen_active or pause_menu_active or hero.health <= 0.0:
+		if start_selection_active or start_screen_active or tutorial_screen_active or pause_menu_active or hero.health <= 0.0:
 			hl.energy = 0.0
 			continue
 
@@ -826,15 +949,22 @@ func _set_halo_from_point(point: Vector2) -> void:
 
 func _start_wave() -> void:
 	wave += 1
-	boss_spawn_pending = wave >= 5 and (wave % 5 == 0)
+	var cycle_wave: int = _current_cycle_wave()
+	boss_spawn_pending = cycle_wave >= 5 and (cycle_wave % 5 == 0)
+	boss_spawn_kind = ENEMY_FINAL_BOSS if (cycle_wave >= 10 and cycle_wave % 10 == 0) else ENEMY_BOSS
+	if boss_spawn_kind == ENEMY_FINAL_BOSS:
+		final_boss_prompt_pending = true
 	if boss_spawn_pending:
 		# Boss waves open as a clean boss-only phase; adds ramp from boss summons over time.
 		spawn_remaining = 0
 	else:
-		spawn_remaining = WAVE_BASE_ENEMIES + wave * WAVE_LINEAR_ENEMIES + int(floor(float(wave) * WAVE_SCALING_ENEMIES))
+		var difficulty_wave: int = _difficulty_wave_value()
+		var cycle_bonus: int = endless_cycle * 8
+		spawn_remaining = WAVE_BASE_ENEMIES + cycle_wave * WAVE_LINEAR_ENEMIES + int(floor(float(difficulty_wave) * WAVE_SCALING_ENEMIES)) + cycle_bonus
 	spawn_timer = 0.18
 	spawning = true
 	waiting_for_next_wave = false
+	boss_victory_prompt_active = false
 	upgrade_phase_active = false
 	intermission_timer = 0.0
 	_set_world_visible_for_upgrade(true)
@@ -845,7 +975,8 @@ func _update_spawning(delta: float) -> void:
 		return
 
 	spawn_timer -= delta
-	var interval: float = maxf(WAVE_SPAWN_INTERVAL_START - float(wave) * WAVE_SPAWN_INTERVAL_DECAY, WAVE_SPAWN_INTERVAL_FLOOR)
+	var difficulty_wave: int = _difficulty_wave_value()
+	var interval: float = maxf(WAVE_SPAWN_INTERVAL_START - float(difficulty_wave) * WAVE_SPAWN_INTERVAL_DECAY, WAVE_SPAWN_INTERVAL_FLOOR)
 	while spawn_timer <= 0.0 and (spawn_remaining > 0 or boss_spawn_pending):
 		if boss_spawn_pending:
 			_spawn_boss()
@@ -908,7 +1039,7 @@ func _sync_halo_state() -> void:
 	for i in range(heroes.size()):
 		var hero: Hero = heroes[i]
 		var active: bool = can_project and i == halo_index and hero.health > 0.0
-		var control_active: bool = i == halo_index and hero.health > 0.0 and not upgrade_phase_active and not game_over
+		var control_active: bool = i == halo_index and hero.health > 0.0 and not upgrade_phase_active and not game_over and not boss_victory_prompt_active
 		hero.set_halo(active)
 		hero.set_player_controlled(control_active)
 		if hero.kind == HERO_RANGER:
@@ -970,15 +1101,16 @@ func _spawn_enemy() -> void:
 	var enemy: Enemy = EnemyScript.new()
 	var kind: int = _pick_enemy_kind()
 	var target: Hero = _pick_spawn_target(kind)
-	enemy.configure(kind, _random_spawn_point(), target, wave)
+	enemy.configure(kind, _random_spawn_point(), target, _difficulty_wave_value())
 	_connect_enemy_signals(enemy)
 	enemies_root.add_child(enemy)
 	enemies.append(enemy)
 
 func _spawn_boss() -> void:
 	var enemy: Enemy = EnemyScript.new()
-	var target: Hero = _pick_spawn_target(ENEMY_BOSS)
-	enemy.configure(ENEMY_BOSS, _boss_spawn_point(), target, wave)
+	var kind: int = boss_spawn_kind
+	var target: Hero = _pick_spawn_target(kind)
+	enemy.configure(kind, _boss_spawn_point(), target, _difficulty_wave_value())
 	_connect_enemy_signals(enemy)
 	enemies_root.add_child(enemy)
 	enemies.append(enemy)
@@ -989,13 +1121,13 @@ func _spawn_summoned_enemies_from_queue() -> void:
 
 	for data: Dictionary in summon_spawns:
 		var kind: int = int(data.get("kind", ENEMY_SWARM))
-		if kind == ENEMY_BOSS:
+		if kind == ENEMY_BOSS or kind == ENEMY_FINAL_BOSS:
 			kind = ENEMY_SWARM
 		var spawn_pos: Vector2 = data.get("position", _random_spawn_point())
 		spawn_pos = _clamp_point_to_arena(spawn_pos)
 		var target: Hero = _pick_spawn_target(kind)
 		var enemy: Enemy = EnemyScript.new()
-		enemy.configure(kind, spawn_pos, target, wave)
+		enemy.configure(kind, spawn_pos, target, _difficulty_wave_value())
 		_connect_enemy_signals(enemy)
 		enemies_root.add_child(enemy)
 		enemies.append(enemy)
@@ -1003,8 +1135,9 @@ func _spawn_summoned_enemies_from_queue() -> void:
 	summon_spawns.clear()
 
 func _pick_enemy_kind() -> int:
-	var elite_chance: float = minf(0.06 + float(wave) * 0.012, 0.22)
-	var ranged_chance: float = minf(0.22 + float(wave) * 0.02, 0.42)
+	var d_wave: int = _difficulty_wave_value()
+	var elite_chance: float = minf(0.035 + float(d_wave) * 0.007, 0.15)
+	var ranged_chance: float = minf(0.055 + float(d_wave) * 0.004, 0.12)
 	var roll: float = randf()
 	if roll < elite_chance:
 		return ENEMY_ELITE
@@ -1030,6 +1163,8 @@ func _pick_spawn_target(enemy_kind: int) -> Hero:
 		ENEMY_ELITE:
 			preferred_kind = HERO_ROGUE
 		ENEMY_BOSS:
+			preferred_kind = HERO_KNIGHT
+		ENEMY_FINAL_BOSS:
 			preferred_kind = HERO_KNIGHT
 
 	var preferred: Hero = _find_alive_hero_by_kind(alive, preferred_kind)
@@ -1376,7 +1511,9 @@ func _check_for_game_over() -> void:
 	if alive_count <= 0:
 		game_over = true
 		pause_menu_active = false
+		boss_victory_prompt_active = false
 		halo_equipped = false
+		_stop_bgm()
 		heroes_root.visible = false
 		enemies_root.visible = false
 		projectiles_root.visible = false
@@ -1387,6 +1524,9 @@ func _progress_wave_timing(delta: float) -> void:
 		return
 
 	if enemies.is_empty() and not waiting_for_next_wave:
+		if final_boss_prompt_pending and boss_spawn_kind == ENEMY_FINAL_BOSS:
+			_open_boss_victory_prompt()
+			return
 		waiting_for_next_wave = true
 		_begin_upgrade_phase()
 
@@ -1410,8 +1550,51 @@ func _begin_upgrade_phase() -> void:
 	_set_world_visible_for_upgrade(false)
 	_sync_halo_state()
 
+func _open_boss_victory_prompt() -> void:
+	final_boss_prompt_pending = false
+	waiting_for_next_wave = false
+	upgrade_phase_active = false
+	boss_victory_prompt_active = true
+	intermission_timer = 0.0
+	halo_equipped = false
+	_set_world_visible_for_upgrade(false)
+	_sync_halo_state()
+
+func _continue_after_main_boss() -> void:
+	boss_victory_prompt_active = false
+	final_boss_prompt_pending = false
+	endless_cycle += 1
+	waiting_for_next_wave = false
+	upgrade_phase_active = false
+	intermission_timer = 0.0
+	spawning = false
+	_revive_all_heroes_for_continue()
+	_set_world_visible_for_upgrade(true)
+	_sync_halo_state()
+	_start_wave()
+
+func _revive_all_heroes_for_continue() -> void:
+	var anchor: Vector2 = _camera_target_position()
+	if heroes.is_empty():
+		return
+	var revive_offsets: Array[Vector2] = [
+		Vector2(0.0, -14.0),
+		Vector2(-56.0, 42.0),
+		Vector2(56.0, 42.0)
+	]
+	for i in range(heroes.size()):
+		var hero: Hero = heroes[i]
+		if hero.health > 0.0:
+			continue
+		hero.health = hero.max_health
+		hero.global_position = _clamp_point_to_arena(anchor + revive_offsets[i % revive_offsets.size()])
+		hero.current_velocity = Vector2.ZERO
+		hero.knockback_velocity = Vector2.ZERO
+		hero.pending_damage_source = Vector2.ZERO
+		hero.queue_redraw()
+
 func _set_world_visible_for_upgrade(visible: bool) -> void:
-	heroes_root.visible = visible and not start_selection_active and not start_screen_active
+	heroes_root.visible = visible and not start_selection_active and not start_screen_active and not tutorial_screen_active and not boss_victory_prompt_active
 	enemies_root.visible = visible
 	projectiles_root.visible = visible
 
@@ -1510,7 +1693,8 @@ func _roll_upgrade_choices() -> Array[int]:
 		result.append(pool[idx])
 		pool.remove_at(idx)
 
-	if wave > 0 and wave % 5 == 0:
+	var cycle_wave: int = _current_cycle_wave()
+	if cycle_wave > 0 and cycle_wave % 5 == 0:
 		if not result.has(UPGRADE_GOLDEN_SURGE):
 			if result.size() >= 3:
 				result[randi() % result.size()] = UPGRADE_GOLDEN_SURGE
@@ -1537,6 +1721,26 @@ func _start_screen_button_rect() -> Rect2:
 		START_SCREEN_BUTTON_SIZE
 	)
 
+func _tutorial_panel_rect_screen() -> Rect2:
+	var view_size: Vector2 = _viewport_size()
+	var max_w: float = minf(view_size.x - 24.0, maxf(460.0, view_size.x - TUTORIAL_PANEL_MARGIN_X * 2.0))
+	var max_h: float = minf(view_size.y - 24.0, maxf(360.0, view_size.y - TUTORIAL_PANEL_MARGIN_Y * 2.0))
+	var panel_size: Vector2 = Vector2(
+		minf(TUTORIAL_PANEL_SIZE.x, max_w),
+		minf(TUTORIAL_PANEL_SIZE.y, max_h)
+	)
+	var panel_pos: Vector2 = (view_size - panel_size) * 0.5
+	return Rect2(panel_pos, panel_size)
+
+func _tutorial_continue_button_rect() -> Rect2:
+	var panel: Rect2 = _tutorial_panel_rect_screen()
+	var btn_w: float = minf(TUTORIAL_BUTTON_SIZE.x, panel.size.x - 80.0)
+	var btn_h: float = TUTORIAL_BUTTON_SIZE.y
+	return Rect2(
+		Vector2(panel.position.x + (panel.size.x - btn_w) * 0.5, panel.end.y - btn_h - 28.0),
+		Vector2(btn_w, btn_h)
+	)
+
 func _game_over_button_rect() -> Rect2:
 	var view_size: Vector2 = _viewport_size()
 	var panel: Rect2 = Rect2((view_size - GAME_OVER_PANEL_SIZE) * 0.5, GAME_OVER_PANEL_SIZE)
@@ -1544,6 +1748,38 @@ func _game_over_button_rect() -> Rect2:
 		Vector2((view_size.x - GAME_OVER_BUTTON_SIZE.x) * 0.5, panel.position.y + 214.0),
 		GAME_OVER_BUTTON_SIZE
 	)
+
+func _boss_victory_continue_button_rect() -> Rect2:
+	var panel: Rect2 = _boss_victory_panel_rect_screen()
+	var gap: float = 26.0
+	var usable_w: float = panel.size.x - 96.0
+	var btn_w: float = maxf(120.0, minf(BOSS_VICTORY_BUTTON_SIZE.x, (usable_w - gap) * 0.5))
+	var btn_h: float = BOSS_VICTORY_BUTTON_SIZE.y
+	var y: float = panel.end.y - btn_h - 38.0
+	var x: float = panel.position.x + (panel.size.x - (btn_w * 2.0 + gap)) * 0.5
+	return Rect2(
+		Vector2(x, y),
+		Vector2(btn_w, btn_h)
+	)
+
+func _boss_victory_home_button_rect() -> Rect2:
+	var continue_rect: Rect2 = _boss_victory_continue_button_rect()
+	var gap: float = 26.0
+	return Rect2(
+		Vector2(continue_rect.end.x + gap, continue_rect.position.y),
+		continue_rect.size
+	)
+
+func _boss_victory_panel_rect_screen() -> Rect2:
+	var view_size: Vector2 = _viewport_size()
+	var max_w: float = minf(view_size.x - 24.0, maxf(420.0, view_size.x - BOSS_VICTORY_PANEL_MARGIN_X * 2.0))
+	var max_h: float = minf(view_size.y - 24.0, maxf(300.0, view_size.y - BOSS_VICTORY_PANEL_MARGIN_Y * 2.0))
+	var panel_size: Vector2 = Vector2(
+		minf(BOSS_VICTORY_PANEL_SIZE.x, max_w),
+		minf(BOSS_VICTORY_PANEL_SIZE.y, max_h)
+	)
+	var panel_pos: Vector2 = (view_size - panel_size) * 0.5
+	return Rect2(panel_pos, panel_size)
 
 func _pause_resume_button_rect() -> Rect2:
 	var view_size: Vector2 = _viewport_size()
@@ -1563,9 +1799,34 @@ func _pause_home_button_rect() -> Rect2:
 
 func _open_starting_hero_menu() -> void:
 	start_screen_active = false
+	tutorial_screen_active = false
 	start_selection_active = true
 	pause_menu_active = false
+	boss_victory_prompt_active = false
 	game_over = false
+	_start_bgm_menu()
+	_set_world_visible_for_upgrade(false)
+	_sync_halo_state()
+
+func _open_start_screen() -> void:
+	start_screen_active = true
+	tutorial_screen_active = false
+	start_selection_active = false
+	pause_menu_active = false
+	boss_victory_prompt_active = false
+	game_over = false
+	_start_bgm_menu()
+	_set_world_visible_for_upgrade(false)
+	_sync_halo_state()
+
+func _open_tutorial_screen() -> void:
+	start_screen_active = false
+	tutorial_screen_active = true
+	start_selection_active = false
+	pause_menu_active = false
+	boss_victory_prompt_active = false
+	game_over = false
+	_start_bgm_menu()
 	_set_world_visible_for_upgrade(false)
 	_sync_halo_state()
 
@@ -1582,6 +1843,7 @@ func _resume_from_pause() -> void:
 	projectiles_root.visible = true
 
 func _return_to_main_menu() -> void:
+	_stop_bgm()
 	get_tree().reload_current_scene()
 
 func _choose_starting_hero_from_point(screen_point: Vector2) -> void:
@@ -1600,14 +1862,17 @@ func _choose_starting_hero(index: int) -> void:
 	if heroes[index].health <= 0.0:
 		return
 
+	_play_ui_start_confirm_sfx()
 	start_selection_active = false
 	pause_menu_active = false
+	boss_victory_prompt_active = false
 	heroes_root.visible = true
 	halo_equipped = false
 	halo_charge = halo_charge_cap
 	halo_recharge_delay_timer = 0.0
 	halo_toggle_lock_timer = 0.0
 	_set_halo(index, false)
+	_start_bgm_game()
 	_start_wave()
 
 func _upgrade_slot_rect(slot: int) -> Rect2:
@@ -1621,7 +1886,7 @@ func _upgrade_slot_rect(slot: int) -> Rect2:
 	return Rect2(Vector2(start_x + float(slot) * (width + gap), y), Vector2(width, height))
 
 func _camera_target_position() -> Vector2:
-	if start_selection_active or start_screen_active:
+	if start_selection_active or start_screen_active or tutorial_screen_active:
 		return arena_rect.get_center()
 
 	if halo_index >= 0 and halo_index < heroes.size() and heroes[halo_index].health > 0.0:
@@ -1643,7 +1908,7 @@ func _update_camera(delta: float) -> void:
 	var target: Vector2 = _camera_target_position()
 	var follow_t: float = clampf(CAMERA_FOLLOW_SMOOTH * delta, 0.0, 1.0)
 	world_camera.position = world_camera.position.lerp(target, follow_t)
-	var target_zoom: Vector2 = CAMERA_ZOOM_MENU if (start_selection_active or start_screen_active) else CAMERA_ZOOM_GAME
+	var target_zoom: Vector2 = CAMERA_ZOOM_MENU if (start_selection_active or start_screen_active or tutorial_screen_active) else CAMERA_ZOOM_GAME
 	var zoom_t: float = clampf(CAMERA_ZOOM_SMOOTH * delta, 0.0, 1.0)
 	world_camera.zoom = world_camera.zoom.lerp(target_zoom, zoom_t)
 	_update_camera_shake(delta)
@@ -1664,6 +1929,47 @@ func _add_camera_shake(amount: float) -> void:
 	camera_shake_strength = minf(CAMERA_SHAKE_MAX, camera_shake_strength + amount)
 	camera_shake_timer = maxf(camera_shake_timer, CAMERA_SHAKE_DURATION)
 
+func _setup_bgm() -> void:
+	bgm_player = AudioStreamPlayer.new()
+	bgm_player.name = "BGMPlayer"
+	bgm_player.volume_db = BGM_MENU_VOLUME_DB
+	var stream: AudioStream = load(BGM_PATH) as AudioStream
+	if stream == null:
+		push_warning("BGM file not found at %s" % [BGM_PATH])
+		add_child(bgm_player)
+		return
+	var mp3_stream: AudioStreamMP3 = stream as AudioStreamMP3
+	if mp3_stream != null:
+		mp3_stream.loop = true
+	bgm_player.stream = stream
+	add_child(bgm_player)
+
+func _start_bgm_menu() -> void:
+	if bgm_player == null:
+		return
+	if bgm_player.stream == null:
+		return
+	bgm_player.volume_db = BGM_MENU_VOLUME_DB
+	if not bgm_player.playing:
+		bgm_player.play()
+
+func _start_bgm_game() -> void:
+	if bgm_player == null:
+		return
+	if bgm_player.stream == null:
+		return
+	bgm_player.volume_db = BGM_GAME_VOLUME_DB
+	# Restart from the beginning when a run starts.
+	if bgm_player.playing:
+		bgm_player.stop()
+	bgm_player.play()
+
+func _stop_bgm() -> void:
+	if bgm_player == null:
+		return
+	if bgm_player.playing:
+		bgm_player.stop()
+
 func _setup_audio_sfx() -> void:
 	if not ENABLE_SFX and not PERFECT_POSITION_SOUND_ENABLED:
 		return
@@ -1677,6 +1983,36 @@ func _setup_audio_sfx() -> void:
 	sfx_player.volume_db = -6.0
 	sfx_player.play()
 	sfx_playback = sfx_player.get_stream_playback() as AudioStreamGeneratorPlayback
+
+func _setup_ui_sfx() -> void:
+	ui_click_stream = load(UI_CLICK_SFX_PATH) as AudioStream
+	ui_start_confirm_stream = load(UI_START_CONFIRM_SFX_PATH) as AudioStream
+
+	ui_click_player = AudioStreamPlayer.new()
+	ui_click_player.name = "UIClickSFXPlayer"
+	ui_click_player.volume_db = UI_CLICK_SFX_VOLUME_DB
+	ui_click_player.bus = "Master"
+	ui_click_player.stream = ui_click_stream
+	add_child(ui_click_player)
+
+	ui_start_confirm_player = AudioStreamPlayer.new()
+	ui_start_confirm_player.name = "UIStartConfirmSFXPlayer"
+	ui_start_confirm_player.volume_db = UI_START_CONFIRM_SFX_VOLUME_DB
+	ui_start_confirm_player.bus = "Master"
+	ui_start_confirm_player.stream = ui_start_confirm_stream
+	add_child(ui_start_confirm_player)
+
+func _play_ui_click_sfx() -> void:
+	if ui_click_player == null or ui_click_stream == null:
+		return
+	ui_click_player.pitch_scale = randf_range(0.98, 1.02)
+	ui_click_player.play()
+
+func _play_ui_start_confirm_sfx() -> void:
+	if ui_start_confirm_player == null or ui_start_confirm_stream == null:
+		return
+	ui_start_confirm_player.pitch_scale = 1.0
+	ui_start_confirm_player.play()
 
 func _play_hit_sfx(enemy_hit: bool, intensity: float) -> void:
 	if not ENABLE_SFX:
@@ -1734,7 +2070,7 @@ func _push_sfx_tone(freq: float, duration: float, amp: float, allow_when_sfx_dis
 		phase_h += phase_inc_h
 
 func _on_enemy_impact(position: Vector2, intensity: float) -> void:
-	if start_selection_active:
+	if start_selection_active or start_screen_active or tutorial_screen_active:
 		return
 	var feedback_mult: float = PERFECT_POSITION_HIT_FEEDBACK_MULT if perfect_position_active else 1.0
 	_add_camera_shake((0.55 + intensity * 0.75) * feedback_mult)
@@ -1744,7 +2080,7 @@ func _on_enemy_impact(position: Vector2, intensity: float) -> void:
 		perfect_position_impact_flash_timer = PERFECT_POSITION_IMPACT_FLASH_INTERVAL
 
 func _on_hero_impact(_position: Vector2, intensity: float) -> void:
-	if start_selection_active:
+	if start_selection_active or start_screen_active or tutorial_screen_active:
 		return
 	_add_camera_shake(0.75 + intensity * 0.95)
 	_play_hit_sfx(false, intensity)
@@ -1831,6 +2167,7 @@ func _choose_upgrade(slot: int) -> void:
 	if slot < 0 or slot >= upgrade_choices.size():
 		return
 
+	_play_ui_click_sfx()
 	var upgrade_id: int = upgrade_choices[slot]
 	_apply_upgrade(upgrade_id)
 	upgrade_phase_active = false
@@ -1900,7 +2237,9 @@ func _apply_upgrade(upgrade_id: int) -> void:
 			for hero: Hero in heroes:
 				if hero.kind == HERO_ROGUE:
 					hero.rogue_dual_strike_unlocked = true
-					hero.attack_cooldown = maxf(0.18, hero.attack_cooldown * 0.95)
+					hero.attack_damage += 1.7
+					hero.attack_cooldown = maxf(0.18, hero.attack_cooldown * 0.93)
+					hero.rogue_halo_damage_bonus_mult += 0.05
 		UPGRADE_TANK_HEAVY_ATTACK:
 			for hero: Hero in heroes:
 				if hero.kind == HERO_KNIGHT:
@@ -1926,9 +2265,9 @@ func _apply_upgrade(upgrade_id: int) -> void:
 		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
 			for hero: Hero in heroes:
 				if hero.kind == HERO_ROGUE and hero.rogue_dual_strike_unlocked:
-					hero.attack_damage += 1.35
-					hero.attack_cooldown = maxf(0.16, hero.attack_cooldown * 0.92)
-					hero.rogue_halo_damage_bonus_mult += 0.06
+					hero.attack_damage += 1.9
+					hero.attack_cooldown = maxf(0.16, hero.attack_cooldown * 0.9)
+					hero.rogue_halo_damage_bonus_mult += 0.08
 		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
 			for hero: Hero in heroes:
 				if hero.kind == HERO_KNIGHT and hero.tank_heavy_attack_unlocked:
@@ -2011,7 +2350,7 @@ func _upgrade_description(upgrade_id: int) -> String:
 		UPGRADE_GOLDEN_SURGE:
 			return "Boss reward: major all-around power spike this run."
 		UPGRADE_ROGUE_TWIN_FANGS:
-			return "Unlock Rogue dual strike: attacks in front and behind each swing."
+			return "Unlock Twin Fangs: two side slashes plus a finishing stab each attack."
 		UPGRADE_TANK_HEAVY_ATTACK:
 			return "Unlock Tank charged slam: huge area strike that punishes swarms."
 		UPGRADE_RANGER_TRIPLE_ARROWS:
@@ -2021,7 +2360,7 @@ func _upgrade_description(upgrade_id: int) -> String:
 		UPGRADE_HALO_ECHO:
 			return "Add another bouncing halo (up to %d total)." % [SPECTRAL_HALO_MAX_COUNT]
 		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
-			return "Twin Fangs upgrade: stronger dual strikes and faster rogue attacks."
+			return "Twin Fangs upgrade: stronger slash chain and faster rogue attack cadence."
 		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
 			return "Heavy Attack upgrade: stronger slams, faster cadence, bonus tank HP."
 		UPGRADE_RANGER_TRIPLE_ARROWS_PLUS:
@@ -2042,7 +2381,7 @@ func _update_ui() -> void:
 	wave_label.position = Vector2(view_size.x - 260.0, view_size.y - 56.0)
 	wave_label.size = Vector2(240.0, 42.0)
 
-	if start_selection_active or start_screen_active or game_over:
+	if start_selection_active or start_screen_active or tutorial_screen_active or game_over or boss_victory_prompt_active:
 		wave_label.text = ""
 		threat_label.text = ""
 		hero_status.text = ""
@@ -2083,6 +2422,12 @@ func _update_ui() -> void:
 	elif waiting_for_next_wave:
 		status_line = "Wave clear. Next wave in %.1fs." % [maxf(intermission_timer, 0.0)]
 	hint_label.text = status_line
+
+func _current_cycle_wave() -> int:
+	return wave
+
+func _difficulty_wave_value() -> int:
+	return wave + endless_cycle * 6
 
 func _get_player_move_input() -> Vector2:
 	var x: float = 0.0
@@ -2430,6 +2775,88 @@ func _draw() -> void:
 		draw_string(card_font, Vector2(view_rect.position.x, button_rect.end.y + 34.0), "Press ENTER or click Start", HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, 20, Color(0.84, 0.92, 1.0, 0.8))
 		return
 
+	if tutorial_screen_active:
+		_draw_start_menu_backdrop(view_rect)
+		draw_rect(view_rect, Color(0.01, 0.03, 0.07, 0.14), true)
+		var hover_screen: Vector2 = get_viewport().get_mouse_position()
+		var card_font: Font = hero_status.get_theme_font("font")
+		if card_font == null:
+			card_font = ThemeDB.fallback_font
+		var button_font: Font = hud_font if hud_font != null else card_font
+		var title_font: Font = start_menu_title_font if start_menu_title_font != null else button_font
+
+		var panel_screen: Rect2 = _tutorial_panel_rect_screen()
+		var panel: Rect2 = _screen_rect_to_world(panel_screen)
+		draw_rect(panel, Color(0.03, 0.06, 0.1, 0.86), true)
+		draw_rect(panel.grow(-6.0), Color(0.01, 0.03, 0.06, 0.62), true)
+		draw_rect(panel, Color(0.9, 0.95, 1.0, 0.42), false, 2.2)
+
+		var title_text: String = "How To Play"
+		var title_size: int = _fit_font_size_for_text(title_font, title_text, panel.size.x - 80.0, 58, 30)
+		var title_y: float = panel.position.y + 62.0
+		draw_string(title_font, Vector2(panel.position.x + 3.0, title_y + 4.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, title_size, Color(0.0, 0.0, 0.0, 0.78))
+		draw_string(title_font, Vector2(panel.position.x, title_y), title_text, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, title_size, Color(0.95, 0.85, 0.62, 0.98))
+
+		var content_left: float = panel.position.x + 52.0
+		var content_width: float = panel.size.x - 104.0
+		var content_y: float = panel.position.y + 116.0
+		var heading_size: int = 24
+		var line_size: int = 18
+		var section_gap: float = 10.0
+		var line_gap: float = 22.0
+
+		var section_headers: Array[String] = [
+			"CONTROLS",
+			"HALO SYSTEM",
+			"POSITIONING ADVANTAGE",
+			"YOUR GOAL"
+		]
+		var section_lines: Array = [
+			[
+				"WASD / Arrows: Move selected hero",
+				"1 / 2 / 3 or Click Hero: Select who you move",
+				"SPACE or Double-Click Hero: Toggle Halo on selected hero",
+				"ESC: Pause"
+			],
+			[
+				"Only one hero can hold the Halo at a time.",
+				"Halo hero becomes invincible and your main playmaker."
+			],
+			[
+				"Keep all heroes close in the inner formation ring.",
+				"Tight formation triggers stronger team payoff.",
+				"Tank stabilizes, Ranger sustains, Rogue finishes."
+			],
+			[
+				"Survive waves, choose upgrades, and beat bosses."
+			]
+		]
+
+		for idx in range(section_headers.size()):
+			var header: String = section_headers[idx]
+			draw_string(button_font, Vector2(content_left + 2.0, content_y + 2.0), header, HORIZONTAL_ALIGNMENT_LEFT, content_width, heading_size, Color(0.0, 0.0, 0.0, 0.7))
+			draw_string(button_font, Vector2(content_left, content_y), header, HORIZONTAL_ALIGNMENT_LEFT, content_width, heading_size, Color(0.94, 0.96, 1.0, 0.98))
+			content_y += 26.0
+			var lines: Array = section_lines[idx]
+			for line: String in lines:
+				draw_string(card_font, Vector2(content_left + 2.0, content_y + 1.0), line, HORIZONTAL_ALIGNMENT_LEFT, content_width, line_size, Color(0.0, 0.0, 0.0, 0.64))
+				draw_string(card_font, Vector2(content_left, content_y), line, HORIZONTAL_ALIGNMENT_LEFT, content_width, line_size, Color(0.88, 0.94, 1.0, 0.94))
+				content_y += line_gap
+			content_y += section_gap
+
+		var continue_screen: Rect2 = _tutorial_continue_button_rect()
+		var continue_rect: Rect2 = _screen_rect_to_world(continue_screen)
+		var continue_hover: bool = continue_screen.has_point(hover_screen)
+		draw_rect(continue_rect, Color(0.16, 0.24, 0.36, 0.96) if not continue_hover else Color(0.24, 0.34, 0.48, 0.99), true)
+		draw_rect(continue_rect, Color(0.9, 0.95, 1.0, 0.84), false, 2.2)
+		var continue_label: String = "CONTINUE TO HERO SELECT"
+		var continue_size: int = _fit_font_size_for_text(button_font, continue_label, continue_rect.size.x - 22.0, 24, 13)
+		var continue_base_y: float = _centered_text_baseline(continue_rect, button_font, continue_size)
+		draw_string(button_font, Vector2(continue_rect.position.x + 2.0, continue_base_y + 2.0), continue_label, HORIZONTAL_ALIGNMENT_CENTER, continue_rect.size.x, continue_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(button_font, Vector2(continue_rect.position.x, continue_base_y), continue_label, HORIZONTAL_ALIGNMENT_CENTER, continue_rect.size.x, continue_size, Color(0.96, 0.99, 1.0, 0.98))
+
+		return
+
 	if start_selection_active:
 		_draw_start_menu_backdrop(view_rect)
 		draw_rect(view_rect, Color(0.01, 0.03, 0.07, 0.03), true)
@@ -2512,6 +2939,22 @@ func _draw() -> void:
 			draw_rect(rect, base_color, true)
 			draw_rect(rect.grow(-3.0), Color(0.0, 0.0, 0.0, 0.12), true)
 			draw_rect(rect, Color(0.9, 0.95, 1.0, 0.78), false, 2.2)
+
+			var custom_card: Texture2D = null
+			if i == HERO_KNIGHT:
+				custom_card = start_card_tank_custom
+			elif i == HERO_RANGER:
+				custom_card = start_card_ranger_custom
+
+			if custom_card != null:
+				var custom_rect: Rect2 = rect.grow(-4.0)
+				draw_rect(custom_rect, Color(0.0, 0.0, 0.0, 0.22), true)
+				_draw_texture_fit(custom_card, custom_rect, Color(1.0, 1.0, 1.0, 0.98))
+				if is_hover:
+					draw_rect(custom_rect, Color(1.0, 1.0, 1.0, 0.09), true)
+				draw_rect(rect, Color(0.96, 0.98, 1.0, 0.9), false, 2.4)
+				continue
+
 			var icon_size: Vector2 = Vector2(92.0, 92.0)
 			var icon_rect: Rect2 = Rect2(
 				rect.position + Vector2((rect.size.x - icon_size.x) * 0.5, 12.0),
@@ -2612,6 +3055,15 @@ func _draw() -> void:
 				else:
 					base_color = Color(0.2, 0.28, 0.38, 0.98)
 					text_color = Color(1.0, 1.0, 1.0, 1.0)
+			var custom_card: Texture2D = _custom_upgrade_card_texture(upgrade_id)
+			if custom_card != null:
+				var art_rect: Rect2 = rect.grow(-1.0)
+				draw_rect(rect, Color(0.08, 0.1, 0.16, 0.98), true)
+				draw_texture_rect(custom_card, art_rect, false, Color(1.0, 1.0, 1.0, 1.0))
+				if is_hover:
+					draw_rect(art_rect, Color(1.0, 1.0, 1.0, 0.08), true)
+				draw_rect(rect, Color(0.95, 0.98, 1.0, 0.84), false, 2.0)
+				continue
 			draw_rect(rect, base_color, true)
 			draw_rect(rect, border_color, false, 2.0)
 			draw_string(card_font, rect.position + Vector2(14.0, 30.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24.0, 19, text_color)
@@ -2621,6 +3073,79 @@ func _draw() -> void:
 				y += 18.0
 			if _is_boss_reward_upgrade(upgrade_id):
 				draw_string(card_font, rect.position + Vector2(14.0, rect.size.y - 10.0), "BOSS REWARD", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24.0, 13, Color(1.0, 0.88, 0.5, 0.95))
+
+	if boss_victory_prompt_active:
+		draw_rect(view_rect, Color(0.0, 0.0, 0.0, 0.66), true)
+		var card_font: Font = hero_status.get_theme_font("font")
+		if card_font == null:
+			card_font = ThemeDB.fallback_font
+		var button_font: Font = hud_font if hud_font != null else card_font
+		var title_font: Font = start_menu_title_font if start_menu_title_font != null else button_font
+		var body_font: Font = button_font
+		var panel_screen: Rect2 = _boss_victory_panel_rect_screen()
+		var panel: Rect2 = _screen_rect_to_world(panel_screen)
+		draw_rect(panel, Color(0.03, 0.06, 0.1, 0.8), true)
+		draw_rect(panel.grow(-6.0), Color(0.01, 0.03, 0.06, 0.58), true)
+		draw_rect(panel, Color(0.9, 0.95, 1.0, 0.38), false, 2.2)
+
+		var title_line_1: String = "MAIN BOSS"
+		var title_line_2: String = "DEFEATED"
+		var title_w: float = panel.size.x - 64.0
+		var title_size_1: int = _fit_font_size_for_text(title_font, title_line_1, title_w, 58, 26)
+		var title_size_2: int = _fit_font_size_for_text(title_font, title_line_2, title_w, 56, 24)
+		var title_y: float = panel.position.y + 64.0
+		draw_string(title_font, Vector2(panel.position.x + 3.0, title_y + 4.0), title_line_1, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, title_size_1, Color(0.0, 0.0, 0.0, 0.78))
+		draw_string(title_font, Vector2(panel.position.x, title_y), title_line_1, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, title_size_1, Color(0.95, 0.85, 0.62, 0.98))
+		title_y += 46.0
+		draw_string(title_font, Vector2(panel.position.x + 3.0, title_y + 4.0), title_line_2, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, title_size_2, Color(0.0, 0.0, 0.0, 0.78))
+		draw_string(title_font, Vector2(panel.position.x, title_y), title_line_2, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, title_size_2, Color(0.95, 0.85, 0.62, 0.98))
+
+		var continue_screen: Rect2 = _boss_victory_continue_button_rect()
+		var continue_rect: Rect2 = _screen_rect_to_world(continue_screen)
+		var home_screen: Rect2 = _boss_victory_home_button_rect()
+		var home_rect: Rect2 = _screen_rect_to_world(home_screen)
+
+		var body_top: float = panel.position.y + 160.0
+		var body_bottom: float = continue_rect.position.y - 18.0
+		var body_max_w: float = panel.size.x - 88.0
+		var body_header: String = "CONTINUE YOUR RUN?"
+		var info_text: String = "You keep all skills and upgrades. Fallen heroes are revived on continue. Waves continue from 11 onward, and enemy challenge keeps scaling up each wave."
+		var info_lines: Array[String] = _wrap_text_lines(info_text, 46, 5)
+		var header_size: int = _fit_font_size_for_text(body_font, body_header, body_max_w, 26, 16)
+		var info_size: int = 17
+		for line: String in info_lines:
+			info_size = mini(info_size, _fit_font_size_for_text(body_font, line, body_max_w, 17, 12))
+		var total_height: float = 34.0 + float(info_lines.size()) * 24.0
+		var available_height: float = maxf(88.0, body_bottom - body_top)
+		var line_y: float = body_top + maxf(0.0, (available_height - total_height) * 0.5)
+
+		var hover_screen: Vector2 = get_viewport().get_mouse_position()
+		draw_string(body_font, Vector2(panel.position.x + 46.0, line_y + 1.0), body_header, HORIZONTAL_ALIGNMENT_LEFT, body_max_w, header_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(body_font, Vector2(panel.position.x + 44.0, line_y), body_header, HORIZONTAL_ALIGNMENT_LEFT, body_max_w, header_size, Color(0.9, 0.96, 1.0, 0.98))
+		line_y += 34.0
+		for line: String in info_lines:
+			draw_string(body_font, Vector2(panel.position.x + 46.0, line_y + 1.0), line, HORIZONTAL_ALIGNMENT_LEFT, body_max_w, info_size, Color(0.0, 0.0, 0.0, 0.62))
+			draw_string(body_font, Vector2(panel.position.x + 44.0, line_y), line, HORIZONTAL_ALIGNMENT_LEFT, body_max_w, info_size, Color(0.9, 0.96, 1.0, 0.96))
+			line_y += 24.0
+
+		var continue_hover: bool = continue_screen.has_point(hover_screen)
+		draw_rect(continue_rect, Color(0.16, 0.24, 0.36, 0.96) if not continue_hover else Color(0.24, 0.34, 0.48, 0.99), true)
+		draw_rect(continue_rect, Color(0.9, 0.95, 1.0, 0.84), false, 2.2)
+		var continue_label: String = "CONTINUE RUN"
+		var continue_size: int = _fit_font_size_for_text(button_font, continue_label, continue_rect.size.x - 22.0, 22, 13)
+		var continue_base_y: float = _centered_text_baseline(continue_rect, button_font, continue_size)
+		draw_string(button_font, Vector2(continue_rect.position.x + 2.0, continue_base_y + 2.0), continue_label, HORIZONTAL_ALIGNMENT_CENTER, continue_rect.size.x, continue_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(button_font, Vector2(continue_rect.position.x, continue_base_y), continue_label, HORIZONTAL_ALIGNMENT_CENTER, continue_rect.size.x, continue_size, Color(0.96, 0.99, 1.0, 0.98))
+
+		var home_hover: bool = home_screen.has_point(hover_screen)
+		draw_rect(home_rect, Color(0.15, 0.21, 0.3, 0.96) if not home_hover else Color(0.23, 0.3, 0.4, 0.98), true)
+		draw_rect(home_rect, Color(0.9, 0.95, 1.0, 0.82), false, 2.2)
+		var home_label: String = "RETURN TO HOME"
+		var home_size: int = _fit_font_size_for_text(button_font, home_label, home_rect.size.x - 22.0, 20, 13)
+		var home_base_y: float = _centered_text_baseline(home_rect, button_font, home_size)
+		draw_string(button_font, Vector2(home_rect.position.x + 2.0, home_base_y + 2.0), home_label, HORIZONTAL_ALIGNMENT_CENTER, home_rect.size.x, home_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(button_font, Vector2(home_rect.position.x, home_base_y), home_label, HORIZONTAL_ALIGNMENT_CENTER, home_rect.size.x, home_size, Color(0.96, 0.99, 1.0, 0.98))
+		return
 
 	if game_over:
 		draw_rect(view_rect, Color(0.0, 0.0, 0.0, 0.62), true)
@@ -2702,7 +3227,7 @@ func _draw() -> void:
 		return
 
 func _draw_team_power_overlay() -> void:
-	if start_selection_active or start_screen_active or pause_menu_active or upgrade_phase_active or game_over or heroes.is_empty():
+	if start_selection_active or start_screen_active or tutorial_screen_active or pause_menu_active or upgrade_phase_active or game_over or heroes.is_empty():
 		return
 
 	_draw_team_links()
@@ -2828,7 +3353,7 @@ func _draw_kill_flashes() -> void:
 func _draw_spectral_halo() -> void:
 	if not spectral_halo_unlocked:
 		return
-	if start_selection_active or start_screen_active or pause_menu_active or game_over:
+	if start_selection_active or start_screen_active or tutorial_screen_active or pause_menu_active or game_over:
 		return
 	if spectral_halo_count <= 0:
 		return

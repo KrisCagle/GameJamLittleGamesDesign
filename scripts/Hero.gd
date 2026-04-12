@@ -112,6 +112,10 @@ const TANK_HEAVY_COOLDOWN := 3.8
 const TANK_HEAVY_RADIUS_BONUS := 96.0
 const TANK_HEAVY_DAMAGE_MULT := 2.35
 const RANGER_TRIPLE_SPREAD := 0.2
+const ROGUE_TWIN_FANGS_SIDE_ANGLE := 0.36
+const ROGUE_TWIN_FANGS_SIDE_DAMAGE_MULT := 0.62
+const ROGUE_TWIN_FANGS_SIDE_REACH_MULT := 1.02
+const ROGUE_TWIN_FANGS_FINISHER_MULT := 0.22
 const FACING_VELOCITY_DEADZONE := 12.0
 const FACING_DIRECTION_DEADZONE := 0.12
 const FACING_SWITCH_THRESHOLD := 0.28
@@ -438,7 +442,7 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 			HeroKind.ROGUE:
 				damage_mult = 1.92 + rogue_halo_damage_bonus_mult
 	elif kind == HeroKind.ROGUE:
-		damage_mult = 0.84
+		damage_mult = 0.94
 
 	var dealt_damage: float = attack_damage * damage_mult
 	if has_halo:
@@ -523,12 +527,18 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 	var hit_count: int = _apply_melee_cone_damage(enemies, attack_dir, melee_reach, melee_half_angle, dealt_damage)
 	_start_melee_swing(attack_dir, melee_reach, melee_half_angle, swing_color)
 	if kind == HeroKind.ROGUE and rogue_dual_strike_unlocked:
-		var offhand_dir: Vector2 = -attack_dir
-		var offhand_damage: float = dealt_damage * 0.8
-		var offhand_half_angle: float = melee_half_angle * 0.9
-		var offhand_reach: float = melee_reach * 0.95
-		hit_count += _apply_melee_cone_damage(enemies, offhand_dir, offhand_reach, offhand_half_angle, offhand_damage)
-		_start_secondary_melee_swing(offhand_dir, offhand_reach, offhand_half_angle, Color(0.74, 1.0, 0.84, 0.9))
+		var side_damage: float = dealt_damage * ROGUE_TWIN_FANGS_SIDE_DAMAGE_MULT
+		var side_half_angle: float = melee_half_angle * 0.92
+		var side_reach: float = melee_reach * ROGUE_TWIN_FANGS_SIDE_REACH_MULT
+		var side_dir_a: Vector2 = attack_dir.rotated(ROGUE_TWIN_FANGS_SIDE_ANGLE)
+		var side_dir_b: Vector2 = attack_dir.rotated(-ROGUE_TWIN_FANGS_SIDE_ANGLE)
+		hit_count += _apply_melee_cone_damage(enemies, side_dir_a, side_reach, side_half_angle, side_damage)
+		hit_count += _apply_melee_cone_damage(enemies, side_dir_b, side_reach, side_half_angle, side_damage)
+		if active_target != null and active_target.health > 0.0:
+			active_target.set_damage_source(global_position)
+			active_target.take_damage(dealt_damage * ROGUE_TWIN_FANGS_FINISHER_MULT)
+			hit_count += 1
+		_start_secondary_melee_swing(side_dir_b, side_reach, side_half_angle, Color(0.74, 1.0, 0.84, 0.9))
 	if hit_count > 0 and kind == HeroKind.KNIGHT and has_halo:
 		for enemy: Enemy in enemies:
 			if enemy.health <= 0.0:
@@ -539,6 +549,8 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 	var cooldown_mult := 1.0
 	if has_halo and kind == HeroKind.ROGUE:
 		cooldown_mult = 0.56
+	if kind == HeroKind.ROGUE and rogue_dual_strike_unlocked:
+		cooldown_mult *= 0.92
 	var melee_power: float = team_power if has_halo else team_power * 0.35
 	cooldown_mult *= lerpf(1.0, 0.86, melee_power)
 	attack_timer = attack_cooldown * cooldown_mult

@@ -17,6 +17,10 @@ const RANGED_FRAME_COUNT := 5
 const RANGED_FLIP_THRESHOLD := 0.14
 const ENEMY_SIZE_MULT := 1.34
 const ENEMY_MOVE_SPEED_MULT := 0.88
+const ENEMY_POST_WAVE5_SPEED_STEP := 0.012
+const ENEMY_POST_WAVE5_SPEED_MAX := 0.2
+const ENEMY_POST_WAVE5_BOSS_SPEED_STEP := 0.007
+const ENEMY_POST_WAVE5_BOSS_SPEED_MAX := 0.1
 const ENEMY_HIT_FLASH_DURATION := 0.11
 const SHOW_ENEMY_HEALTH_BARS := false
 
@@ -150,6 +154,14 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 
 	attack_timer = randf_range(0.0, attack_cooldown)
 	move_speed *= ENEMY_MOVE_SPEED_MULT
+	if wave_level > 5:
+		var over_wave: float = float(wave_level - 5)
+		var speed_bonus: float = 0.0
+		if kind == EnemyKind.BOSS or kind == EnemyKind.FINAL_BOSS:
+			speed_bonus = minf(ENEMY_POST_WAVE5_BOSS_SPEED_MAX, over_wave * ENEMY_POST_WAVE5_BOSS_SPEED_STEP)
+		else:
+			speed_bonus = minf(ENEMY_POST_WAVE5_SPEED_MAX, over_wave * ENEMY_POST_WAVE5_SPEED_STEP)
+		move_speed *= 1.0 + speed_bonus
 	body_radius *= ENEMY_SIZE_MULT
 	ranged_facing_left = false
 	hit_flash_timer = 0.0

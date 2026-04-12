@@ -88,6 +88,22 @@ const WAVE_BOSS_SUPPORT_PER_WAVE := 4
 const WAVE_SPAWN_INTERVAL_START := 0.43
 const WAVE_SPAWN_INTERVAL_FLOOR := 0.16
 const WAVE_SPAWN_INTERVAL_DECAY := 0.014
+const WAVE_BURST_WAVE_START := 5
+const WAVE_BURST_MIN := 2
+const WAVE_BURST_MAX := 4
+const WAVE_BURST_WAVE9_BONUS := 1
+const WAVE_MINI_SURGE_WAVE_START := 6
+const WAVE_MINI_SURGE_DURATION_BASE := 3.2
+const WAVE_MINI_SURGE_DURATION_MAX := 5.2
+const WAVE_MINI_SURGE_DURATION_WAVE_SCALE := 0.06
+const WAVE_MINI_SURGE_COOLDOWN_BASE := 10.6
+const WAVE_MINI_SURGE_COOLDOWN_MIN := 6.2
+const WAVE_MINI_SURGE_COOLDOWN_WAVE_SCALE := 0.24
+const WAVE_MINI_SURGE_INTERVAL_MULT := 0.56
+const WAVE_MINI_SURGE_EXTRA_BATCH := 2
+const WAVE_MINI_SURGE_RECOVERY_DURATION := 2.2
+const WAVE_MINI_SURGE_HERO_ATK_SPEED_BONUS := 0.2
+const WAVE_MINI_SURGE_HERO_DAMAGE_BONUS := 0.15
 const CAMERA_SHAKE_DURATION := 0.16
 const CAMERA_SHAKE_DECAY := 26.0
 const CAMERA_SHAKE_MAX := 8.0
@@ -125,6 +141,9 @@ const SFX_MIN_INTERVAL := 0.035
 const BGM_PATH := "res://assets/audio/los_tres.mp3"
 const BGM_MENU_VOLUME_DB := -23.0
 const BGM_GAME_VOLUME_DB := -16.0
+const BGM_LOOP_CROSSFADE_TIME := 0.72
+const BGM_SILENT_DB := -46.0
+const BGM_VOLUME_SMOOTH := 5.5
 const UI_CLICK_SFX_PATH := "res://assets/audio/single-beep_C_major.wav"
 const UI_START_CONFIRM_SFX_PATH := "res://assets/audio/end-level-beep_C_major.wav"
 const UI_CLICK_SFX_VOLUME_DB := -18.0
@@ -185,6 +204,11 @@ var spawn_timer: float = 0.0
 var spawning: bool = false
 var boss_spawn_pending: bool = false
 var boss_spawn_kind: int = ENEMY_BOSS
+var spawn_burst_remaining: int = 0
+var wave_surge_active: bool = false
+var wave_surge_timer: float = 0.0
+var wave_surge_cooldown_timer: float = 0.0
+var wave_surge_recovery_timer: float = 0.0
 var waiting_for_next_wave: bool = false
 var intermission_timer: float = 0.0
 
@@ -245,7 +269,14 @@ var spectral_halo_positions: Array[Vector2] = []
 var spectral_halo_velocities: Array[Vector2] = []
 var spectral_halo_hit_timers: Array[float] = []
 var spectral_halo_heal_timers: Array[float] = []
-var bgm_player: AudioStreamPlayer = null
+var bgm_players: Array[AudioStreamPlayer] = []
+var bgm_stream: AudioStream = null
+var bgm_target_volume_db: float = BGM_MENU_VOLUME_DB
+var bgm_active_player_index: int = 0
+var bgm_crossfade_active: bool = false
+var bgm_crossfade_timer: float = 0.0
+var bgm_crossfade_from_index: int = 0
+var bgm_crossfade_to_index: int = 1
 var sfx_player: AudioStreamPlayer = null
 var sfx_playback: AudioStreamGeneratorPlayback = null
 var sfx_cooldown_timer: float = 0.0
@@ -352,6 +383,7 @@ func _process(delta: float) -> void:
 	sfx_cooldown_timer = maxf(0.0, sfx_cooldown_timer - delta)
 	perfect_position_impact_flash_timer = maxf(0.0, perfect_position_impact_flash_timer - delta)
 	perfect_position_sound_cooldown_timer = maxf(0.0, perfect_position_sound_cooldown_timer - delta)
+	_update_bgm_loop(delta)
 
 	if start_screen_active:
 		_update_kill_flashes(delta)
@@ -414,7 +446,11 @@ func _process(delta: float) -> void:
 	projectile_spawns.clear()
 	summon_spawns.clear()
 	var player_move_input: Vector2 = _get_player_move_input()
+	var surge_intensity: float = _wave_surge_intensity()
+	var surge_attack_speed_bonus: float = WAVE_MINI_SURGE_HERO_ATK_SPEED_BONUS * surge_intensity
+	var surge_damage_bonus: float = WAVE_MINI_SURGE_HERO_DAMAGE_BONUS * surge_intensity
 	for hero: Hero in heroes:
+		hero.set_wave_surge_boost(surge_attack_speed_bonus, surge_damage_bonus)
 		hero.process_visual_tick(delta)
 		hero.process_tick(delta, enemies, heroes, arena_rect, projectile_spawns, player_move_input)
 
@@ -957,10 +993,20 @@ func _start_wave() -> void:
 	if boss_spawn_pending:
 		# Boss waves open as a clean boss-only phase; adds ramp from boss summons over time.
 		spawn_remaining = 0
+		spawn_burst_remaining = 0
+		wave_surge_active = false
+		wave_surge_timer = 0.0
+		wave_surge_cooldown_timer = 0.0
+		wave_surge_recovery_timer = 0.0
 	else:
 		var difficulty_wave: int = _difficulty_wave_value()
 		var cycle_bonus: int = endless_cycle * 8
 		spawn_remaining = WAVE_BASE_ENEMIES + cycle_wave * WAVE_LINEAR_ENEMIES + int(floor(float(difficulty_wave) * WAVE_SCALING_ENEMIES)) + cycle_bonus
+		spawn_burst_remaining = _roll_spawn_burst_count(cycle_wave)
+		wave_surge_active = false
+		wave_surge_timer = 0.0
+		wave_surge_recovery_timer = 0.0
+		wave_surge_cooldown_timer = _roll_next_surge_cooldown(cycle_wave)
 	spawn_timer = 0.18
 	spawning = true
 	waiting_for_next_wave = false
@@ -974,21 +1020,122 @@ func _update_spawning(delta: float) -> void:
 	if not spawning:
 		return
 
+	_update_wave_surge(delta)
 	spawn_timer -= delta
 	var difficulty_wave: int = _difficulty_wave_value()
 	var interval: float = maxf(WAVE_SPAWN_INTERVAL_START - float(difficulty_wave) * WAVE_SPAWN_INTERVAL_DECAY, WAVE_SPAWN_INTERVAL_FLOOR)
+	if wave_surge_active:
+		interval *= WAVE_MINI_SURGE_INTERVAL_MULT
+	elif wave_surge_recovery_timer > 0.0:
+		interval *= 1.24
 	while spawn_timer <= 0.0 and (spawn_remaining > 0 or boss_spawn_pending):
 		if boss_spawn_pending:
 			_spawn_boss()
 			boss_spawn_pending = false
 			spawn_timer += interval * 1.75
 		elif spawn_remaining > 0:
-			_spawn_enemy()
-			spawn_remaining -= 1
-			spawn_timer += interval
+			var batch_count: int = _next_spawn_batch_size()
+			for _i in range(batch_count):
+				if spawn_remaining <= 0:
+					break
+				_spawn_enemy()
+				spawn_remaining -= 1
+			spawn_timer += interval * randf_range(0.86, 1.18)
 
 	if spawn_remaining <= 0 and not boss_spawn_pending:
 		spawning = false
+		wave_surge_active = false
+		wave_surge_timer = 0.0
+		wave_surge_cooldown_timer = 0.0
+		wave_surge_recovery_timer = 0.0
+
+func _roll_spawn_burst_count(cycle_wave: int) -> int:
+	if cycle_wave < WAVE_BURST_WAVE_START:
+		return 0
+	var max_bonus: int = WAVE_BURST_WAVE9_BONUS if cycle_wave >= 9 else 0
+	return randi_range(WAVE_BURST_MIN, WAVE_BURST_MAX + max_bonus)
+
+func _roll_next_surge_cooldown(cycle_wave: int) -> float:
+	if cycle_wave < WAVE_MINI_SURGE_WAVE_START:
+		return 9999.0
+	var scaled: float = WAVE_MINI_SURGE_COOLDOWN_BASE - float(cycle_wave - WAVE_MINI_SURGE_WAVE_START) * WAVE_MINI_SURGE_COOLDOWN_WAVE_SCALE
+	var base: float = maxf(WAVE_MINI_SURGE_COOLDOWN_MIN, scaled)
+	return base + randf_range(-0.9, 1.2)
+
+func _wave_has_boss_pressure() -> bool:
+	if boss_spawn_pending:
+		return true
+	for enemy: Enemy in enemies:
+		if enemy.health <= 0.0:
+			continue
+		if enemy.kind == ENEMY_BOSS or enemy.kind == ENEMY_FINAL_BOSS:
+			return true
+	return false
+
+func _update_wave_surge(delta: float) -> void:
+	if _current_cycle_wave() < WAVE_MINI_SURGE_WAVE_START:
+		wave_surge_active = false
+		wave_surge_timer = 0.0
+		wave_surge_cooldown_timer = 0.0
+		wave_surge_recovery_timer = 0.0
+		return
+
+	if _wave_has_boss_pressure():
+		wave_surge_active = false
+		wave_surge_timer = 0.0
+		wave_surge_recovery_timer = 0.0
+		return
+
+	if wave_surge_active:
+		wave_surge_timer = maxf(0.0, wave_surge_timer - delta)
+		if wave_surge_timer <= 0.0:
+			wave_surge_active = false
+			wave_surge_recovery_timer = WAVE_MINI_SURGE_RECOVERY_DURATION + randf_range(-0.3, 0.3)
+			wave_surge_cooldown_timer = _roll_next_surge_cooldown(_current_cycle_wave())
+		return
+
+	if wave_surge_recovery_timer > 0.0:
+		wave_surge_recovery_timer = maxf(0.0, wave_surge_recovery_timer - delta)
+		return
+
+	wave_surge_cooldown_timer -= delta
+	if wave_surge_cooldown_timer > 0.0 or spawn_remaining <= 0:
+		return
+
+	wave_surge_active = true
+	var cycle_wave: int = _current_cycle_wave()
+	var duration: float = minf(
+		WAVE_MINI_SURGE_DURATION_MAX,
+		WAVE_MINI_SURGE_DURATION_BASE + float(max(0, cycle_wave - WAVE_MINI_SURGE_WAVE_START)) * WAVE_MINI_SURGE_DURATION_WAVE_SCALE
+	)
+	wave_surge_timer = duration + randf_range(-0.35, 0.48)
+	spawn_burst_remaining += WAVE_MINI_SURGE_EXTRA_BATCH + (1 if cycle_wave >= 10 else 0)
+	_add_camera_shake(0.32)
+
+func _next_spawn_batch_size() -> int:
+	var cycle_wave: int = _current_cycle_wave()
+	var batch: int = 1
+	if cycle_wave >= WAVE_BURST_WAVE_START and spawn_burst_remaining > 0:
+		batch += 1
+		if cycle_wave >= 8 and randf() < 0.42:
+			batch += 1
+		spawn_burst_remaining -= 1
+		if spawn_burst_remaining <= 0:
+			spawn_burst_remaining = _roll_spawn_burst_count(cycle_wave)
+	if wave_surge_active:
+		batch += WAVE_MINI_SURGE_EXTRA_BATCH
+		if cycle_wave >= 10:
+			batch += 1
+	elif wave_surge_recovery_timer > 0.0:
+		batch = maxi(1, batch - 1)
+	return batch
+
+func _wave_surge_intensity() -> float:
+	if wave_surge_active:
+		return 1.0
+	if wave_surge_recovery_timer > 0.0:
+		return clampf(wave_surge_recovery_timer / maxf(WAVE_MINI_SURGE_RECOVERY_DURATION, 0.01), 0.0, 1.0) * 0.3
+	return 0.0
 
 func _update_halo_charge(delta: float) -> void:
 	halo_toggle_lock_timer = maxf(0.0, halo_toggle_lock_timer - delta)
@@ -1930,45 +2077,136 @@ func _add_camera_shake(amount: float) -> void:
 	camera_shake_timer = maxf(camera_shake_timer, CAMERA_SHAKE_DURATION)
 
 func _setup_bgm() -> void:
-	bgm_player = AudioStreamPlayer.new()
-	bgm_player.name = "BGMPlayer"
-	bgm_player.volume_db = BGM_MENU_VOLUME_DB
-	var stream: AudioStream = load(BGM_PATH) as AudioStream
-	if stream == null:
+	bgm_players.clear()
+	bgm_stream = load(BGM_PATH) as AudioStream
+	if bgm_stream == null:
 		push_warning("BGM file not found at %s" % [BGM_PATH])
-		add_child(bgm_player)
 		return
-	var mp3_stream: AudioStreamMP3 = stream as AudioStreamMP3
+
+	# Disable built-in looping and do an explicit crossfade loop to avoid hard cut restarts.
+	var mp3_stream: AudioStreamMP3 = bgm_stream as AudioStreamMP3
 	if mp3_stream != null:
-		mp3_stream.loop = true
-	bgm_player.stream = stream
-	add_child(bgm_player)
+		mp3_stream.loop = false
+	var ogg_stream: AudioStreamOggVorbis = bgm_stream as AudioStreamOggVorbis
+	if ogg_stream != null:
+		ogg_stream.loop = false
+
+	for i in range(2):
+		var player: AudioStreamPlayer = AudioStreamPlayer.new()
+		player.name = "BGMPlayer%d" % [i]
+		player.bus = "Master"
+		player.stream = bgm_stream
+		player.volume_db = BGM_MENU_VOLUME_DB if i == 0 else BGM_SILENT_DB
+		add_child(player)
+		bgm_players.append(player)
+
+	bgm_target_volume_db = BGM_MENU_VOLUME_DB
+	bgm_active_player_index = 0
+	bgm_crossfade_active = false
+	bgm_crossfade_timer = 0.0
+	bgm_crossfade_from_index = 0
+	bgm_crossfade_to_index = 1
+	var starter: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
+	if starter != null:
+		starter.play()
+
+func _bgm_player_at(index: int) -> AudioStreamPlayer:
+	if index < 0 or index >= bgm_players.size():
+		return null
+	return bgm_players[index]
 
 func _start_bgm_menu() -> void:
-	if bgm_player == null:
+	if bgm_players.is_empty():
 		return
-	if bgm_player.stream == null:
-		return
-	bgm_player.volume_db = BGM_MENU_VOLUME_DB
-	if not bgm_player.playing:
-		bgm_player.play()
+	bgm_target_volume_db = BGM_MENU_VOLUME_DB
+	var active_player: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
+	if active_player != null and not active_player.playing:
+		active_player.volume_db = bgm_target_volume_db
+		active_player.play()
 
 func _start_bgm_game() -> void:
-	if bgm_player == null:
+	if bgm_players.is_empty():
 		return
-	if bgm_player.stream == null:
-		return
-	bgm_player.volume_db = BGM_GAME_VOLUME_DB
+	bgm_target_volume_db = BGM_GAME_VOLUME_DB
 	# Restart from the beginning when a run starts.
-	if bgm_player.playing:
-		bgm_player.stop()
-	bgm_player.play()
+	_restart_bgm_now()
+
+func _restart_bgm_now() -> void:
+	if bgm_players.is_empty():
+		return
+	bgm_crossfade_active = false
+	bgm_crossfade_timer = 0.0
+	bgm_crossfade_from_index = 0
+	bgm_crossfade_to_index = 1
+	bgm_active_player_index = 0
+	for i in range(bgm_players.size()):
+		var player: AudioStreamPlayer = _bgm_player_at(i)
+		if player == null:
+			continue
+		if player.playing:
+			player.stop()
+		player.volume_db = bgm_target_volume_db if i == bgm_active_player_index else BGM_SILENT_DB
+	var active_player: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
+	if active_player != null:
+		active_player.play()
 
 func _stop_bgm() -> void:
-	if bgm_player == null:
+	bgm_crossfade_active = false
+	bgm_crossfade_timer = 0.0
+	for player: AudioStreamPlayer in bgm_players:
+		if player != null and player.playing:
+			player.stop()
+
+func _update_bgm_loop(delta: float) -> void:
+	if bgm_players.size() < 2:
 		return
-	if bgm_player.playing:
-		bgm_player.stop()
+	var active_player: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
+	if active_player == null or active_player.stream == null:
+		return
+	if not active_player.playing:
+		active_player.volume_db = bgm_target_volume_db
+		active_player.play()
+		return
+
+	var stream_len: float = active_player.stream.get_length()
+	if stream_len <= BGM_LOOP_CROSSFADE_TIME + 0.08:
+		active_player.volume_db = lerpf(active_player.volume_db, bgm_target_volume_db, clampf(delta * BGM_VOLUME_SMOOTH, 0.0, 1.0))
+		return
+
+	if not bgm_crossfade_active:
+		var time_left: float = stream_len - active_player.get_playback_position()
+		if time_left <= BGM_LOOP_CROSSFADE_TIME:
+			var next_index: int = 1 - bgm_active_player_index
+			var next_player: AudioStreamPlayer = _bgm_player_at(next_index)
+			if next_player != null and next_player.stream != null:
+				if next_player.playing:
+					next_player.stop()
+				next_player.volume_db = BGM_SILENT_DB
+				next_player.play()
+				bgm_crossfade_active = true
+				bgm_crossfade_timer = 0.0
+				bgm_crossfade_from_index = bgm_active_player_index
+				bgm_crossfade_to_index = next_index
+
+	if bgm_crossfade_active:
+		bgm_crossfade_timer += delta
+		var t: float = clampf(bgm_crossfade_timer / BGM_LOOP_CROSSFADE_TIME, 0.0, 1.0)
+		var from_player: AudioStreamPlayer = _bgm_player_at(bgm_crossfade_from_index)
+		var to_player: AudioStreamPlayer = _bgm_player_at(bgm_crossfade_to_index)
+		if from_player == null or to_player == null:
+			bgm_crossfade_active = false
+			return
+		from_player.volume_db = lerpf(bgm_target_volume_db, BGM_SILENT_DB, t)
+		to_player.volume_db = lerpf(BGM_SILENT_DB, bgm_target_volume_db, t)
+		if t >= 1.0:
+			if from_player.playing:
+				from_player.stop()
+			from_player.volume_db = BGM_SILENT_DB
+			bgm_active_player_index = bgm_crossfade_to_index
+			bgm_crossfade_active = false
+			bgm_crossfade_timer = 0.0
+	else:
+		active_player.volume_db = lerpf(active_player.volume_db, bgm_target_volume_db, clampf(delta * BGM_VOLUME_SMOOTH, 0.0, 1.0))
 
 func _setup_audio_sfx() -> void:
 	if not ENABLE_SFX and not PERFECT_POSITION_SOUND_ENABLED:
@@ -2421,6 +2659,10 @@ func _update_ui() -> void:
 		status_line = "Choose one upgrade to continue."
 	elif waiting_for_next_wave:
 		status_line = "Wave clear. Next wave in %.1fs." % [maxf(intermission_timer, 0.0)]
+	elif wave_surge_active:
+		status_line = "Enemy surge! Hold formation and push through."
+	elif wave_surge_recovery_timer > 0.0:
+		status_line = "Regroup window."
 	hint_label.text = status_line
 
 func _current_cycle_wave() -> int:

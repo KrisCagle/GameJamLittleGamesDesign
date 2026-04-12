@@ -74,6 +74,8 @@ var ranger_attack_visual_timer: float = 0.0
 var knight_attack_visual_timer: float = 0.0
 var rogue_attack_visual_timer: float = 0.0
 var team_power: float = 0.0
+var wave_surge_attack_speed_bonus: float = 0.0
+var wave_surge_damage_bonus: float = 0.0
 
 const ROGUE_ASSIST_TRIGGER_RATIO := 0.73
 const ROGUE_ASSIST_THREAT_RADIUS := 225.0
@@ -204,6 +206,8 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	knight_attack_visual_timer = 0.0
 	rogue_attack_visual_timer = 0.0
 	team_power = 0.0
+	wave_surge_attack_speed_bonus = 0.0
+	wave_surge_damage_bonus = 0.0
 	current_velocity = Vector2.ZERO
 	knockback_velocity = Vector2.ZERO
 	hit_flash_timer = 0.0
@@ -445,6 +449,7 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 		damage_mult = 0.94
 
 	var dealt_damage: float = attack_damage * damage_mult
+	dealt_damage *= 1.0 + wave_surge_damage_bonus
 	if has_halo:
 		dealt_damage *= lerpf(1.0, 1.22, team_power)
 	if kind == HeroKind.RANGER:
@@ -491,7 +496,8 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 		var ranged_cooldown_mult: float = 0.86 if has_halo else 1.0
 		var ranged_power: float = team_power if has_halo else team_power * 0.45
 		ranged_cooldown_mult *= lerpf(1.0, 0.78, ranged_power)
-		attack_timer = attack_cooldown * ranged_cooldown_mult
+		var surge_cooldown_mult: float = 1.0 / maxf(1.0 + wave_surge_attack_speed_bonus, 0.1)
+		attack_timer = attack_cooldown * ranged_cooldown_mult * surge_cooldown_mult
 		return
 
 	var attack_dir: Vector2 = (active_target.global_position - global_position).normalized()
@@ -553,7 +559,8 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 		cooldown_mult *= 0.92
 	var melee_power: float = team_power if has_halo else team_power * 0.35
 	cooldown_mult *= lerpf(1.0, 0.86, melee_power)
-	attack_timer = attack_cooldown * cooldown_mult
+	var surge_cooldown_mult: float = 1.0 / maxf(1.0 + wave_surge_attack_speed_bonus, 0.1)
+	attack_timer = attack_cooldown * cooldown_mult * surge_cooldown_mult
 
 func _apply_melee_cone_damage(enemies: Array[Enemy], attack_dir: Vector2, reach: float, half_angle: float, damage: float) -> int:
 	var dir: Vector2 = attack_dir.normalized()
@@ -1184,6 +1191,10 @@ func set_halo(active: bool) -> void:
 
 func set_team_power(power: float) -> void:
 	team_power = clampf(power, 0.0, 1.0)
+
+func set_wave_surge_boost(attack_speed_bonus: float, damage_bonus: float) -> void:
+	wave_surge_attack_speed_bonus = clampf(attack_speed_bonus, 0.0, 1.0)
+	wave_surge_damage_bonus = clampf(damage_bonus, 0.0, 1.0)
 
 func set_player_controlled(active: bool) -> void:
 	if is_player_controlled == active:

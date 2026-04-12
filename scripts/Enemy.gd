@@ -10,10 +10,16 @@ const SWARM_ANIM_ATTACK := "attack"
 const SWARM_FRAME_COUNT := 4
 const RANGED_WALK_SPRITE_PATH := "res://assets/enemies/enemy_ranged_walk.png"
 const RANGED_ATTACK_SPRITE_PATH := "res://assets/enemies/enemy_ranged_attack.png"
+const MINI_BOSS_WALK_SPRITE_PATH := "res://assets/enemies/mini_boss_walk_1.png"
+const MINI_BOSS_ATTACK_SPRITE_PATH := "res://assets/enemies/mini_boss_attack_1.png"
 const FINAL_BOSS_SPRITE_PATH := "res://assets/enemies/final_boss.png"
 const RANGED_ANIM_WALK := "walk"
 const RANGED_ANIM_ATTACK := "attack"
 const RANGED_FRAME_COUNT := 5
+const MINI_BOSS_ANIM_WALK := "walk"
+const MINI_BOSS_ANIM_ATTACK := "attack"
+const MINI_BOSS_WALK_FRAME_COUNT := 6
+const MINI_BOSS_ATTACK_FRAME_COUNT := 4
 const RANGED_FLIP_THRESHOLD := 0.14
 const ENEMY_SIZE_MULT := 1.34
 const ENEMY_MOVE_SPEED_MULT := 0.88
@@ -56,6 +62,7 @@ var boss_time_alive: float = 0.0
 var boss_tentacle_timer: float = 0.0
 var swarm_sprite: AnimatedSprite2D = null
 var ranged_sprite: AnimatedSprite2D = null
+var mini_boss_sprite: AnimatedSprite2D = null
 var final_boss_sprite: Sprite2D = null
 var ranged_facing_left: bool = false
 var hit_flash_timer: float = 0.0
@@ -81,6 +88,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			body_color = Color(0.96, 0.34, 0.34)
 			_ensure_swarm_sprite()
 			_hide_ranged_sprite()
+			_hide_mini_boss_sprite()
 			_hide_final_boss_sprite()
 		EnemyKind.RANGED:
 			max_health = 56.0 + float(wave_level) * 1.6
@@ -93,6 +101,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			body_color = Color(0.98, 0.72, 0.27)
 			_hide_swarm_sprite()
 			_ensure_ranged_sprite()
+			_hide_mini_boss_sprite()
 			_hide_final_boss_sprite()
 		EnemyKind.ELITE:
 			max_health = 120.0 + float(wave_level) * 5.2
@@ -108,6 +117,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			elite_window_active = false
 			_hide_swarm_sprite()
 			_hide_ranged_sprite()
+			_hide_mini_boss_sprite()
 			_hide_final_boss_sprite()
 		EnemyKind.BOSS:
 			# Mini-boss (wave 5/15/25...): lower projectile pressure than before.
@@ -127,6 +137,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			boss_window_active = false
 			boss_time_alive = 0.0
 			boss_tentacle_timer = randf_range(4.0, 5.4)
+			_ensure_mini_boss_sprite()
 			_hide_final_boss_sprite()
 			_hide_swarm_sprite()
 			_hide_ranged_sprite()
@@ -150,6 +161,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			boss_tentacle_timer = randf_range(1.5, 2.1)
 			_hide_swarm_sprite()
 			_hide_ranged_sprite()
+			_hide_mini_boss_sprite()
 			_ensure_final_boss_sprite()
 
 	attack_timer = randf_range(0.0, attack_cooldown)
@@ -206,6 +218,8 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 		elif direction.x < -RANGED_FLIP_THRESHOLD:
 			ranged_facing_left = true
 		ranged_sprite.flip_h = ranged_facing_left
+	if kind == EnemyKind.BOSS and mini_boss_sprite != null and absf(direction.x) > 0.01:
+		mini_boss_sprite.flip_h = direction.x < 0.0
 	var velocity: Vector2 = Vector2.ZERO
 
 	match kind:
@@ -256,6 +270,8 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 		_update_ranged_animation_state(velocity)
 	if kind == EnemyKind.SWARM and swarm_sprite != null:
 		_update_swarm_animation_state(velocity)
+	if kind == EnemyKind.BOSS and mini_boss_sprite != null:
+		_update_mini_boss_animation_state(velocity)
 
 	if _is_boss_type():
 		boss_time_alive += delta
@@ -266,6 +282,8 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 
 		if boss_aoe_timer <= 0.0:
 			_emit_boss_projectile_ring(projectile_spawns)
+			if kind == EnemyKind.BOSS:
+				_play_mini_boss_attack_anim()
 			if kind == EnemyKind.FINAL_BOSS:
 				_emit_final_boss_tentacle_bloom(projectile_spawns)
 			var aoe_cooldown: float = 0.0
@@ -277,6 +295,8 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 
 		if boss_summon_timer <= 0.0:
 			_queue_boss_summons(summon_spawns)
+			if kind == EnemyKind.BOSS:
+				_play_mini_boss_attack_anim()
 			var summon_cooldown: float = 0.0
 			if kind == EnemyKind.FINAL_BOSS:
 				summon_cooldown = maxf(2.6, 4.2 - boss_time_alive * 0.05)
@@ -286,6 +306,8 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 
 		if boss_volley_timer <= 0.0:
 			_spawn_boss_projectile_volley(target_hero, projectile_spawns)
+			if kind == EnemyKind.BOSS:
+				_play_mini_boss_attack_anim()
 			var volley_cooldown: float = 0.0
 			if kind == EnemyKind.FINAL_BOSS:
 				volley_cooldown = 1.02 if not boss_window_active else 1.45
@@ -359,6 +381,32 @@ func _play_swarm_attack_anim() -> void:
 		return
 	swarm_sprite.play(SWARM_ANIM_ATTACK)
 
+func _update_mini_boss_animation_state(velocity: Vector2) -> void:
+	if mini_boss_sprite == null:
+		return
+	if mini_boss_sprite.animation == MINI_BOSS_ANIM_ATTACK:
+		if not mini_boss_sprite.is_playing():
+			if mini_boss_sprite.sprite_frames.has_animation(MINI_BOSS_ANIM_WALK):
+				mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+		return
+	if mini_boss_sprite.animation != MINI_BOSS_ANIM_WALK:
+		if mini_boss_sprite.sprite_frames.has_animation(MINI_BOSS_ANIM_WALK):
+			mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+		return
+	if velocity.length_squared() <= 0.05:
+		if not mini_boss_sprite.is_playing():
+			mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+	else:
+		if not mini_boss_sprite.is_playing():
+			mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+
+func _play_mini_boss_attack_anim() -> void:
+	if mini_boss_sprite == null:
+		return
+	if not mini_boss_sprite.sprite_frames.has_animation(MINI_BOSS_ANIM_ATTACK):
+		return
+	mini_boss_sprite.play(MINI_BOSS_ANIM_ATTACK)
+
 func _update_sprite_flash() -> void:
 	var flash_t: float = 0.0
 	if ENEMY_HIT_FLASH_DURATION > 0.0:
@@ -369,6 +417,8 @@ func _update_sprite_flash() -> void:
 		swarm_sprite.modulate = flash_mod
 	if ranged_sprite != null:
 		ranged_sprite.modulate = flash_mod
+	if mini_boss_sprite != null:
+		mini_boss_sprite.modulate = flash_mod
 	if final_boss_sprite != null:
 		final_boss_sprite.modulate = flash_mod
 
@@ -573,6 +623,52 @@ func _ensure_ranged_sprite() -> void:
 func _hide_ranged_sprite() -> void:
 	if ranged_sprite != null:
 		ranged_sprite.visible = false
+
+func _ensure_mini_boss_sprite() -> void:
+	if mini_boss_sprite != null:
+		mini_boss_sprite.visible = true
+		if not mini_boss_sprite.is_playing():
+			mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+		return
+
+	var walk_texture: Texture2D = load(MINI_BOSS_WALK_SPRITE_PATH)
+	var attack_texture: Texture2D = load(MINI_BOSS_ATTACK_SPRITE_PATH)
+	if walk_texture == null and attack_texture == null:
+		return
+
+	var frames: SpriteFrames = SpriteFrames.new()
+	if walk_texture != null:
+		var walk_frames: int = _sheet_frame_count(walk_texture, MINI_BOSS_WALK_FRAME_COUNT)
+		_append_sheet_animation(frames, walk_texture, MINI_BOSS_ANIM_WALK, walk_frames, 6.6, true)
+	if attack_texture != null:
+		var attack_frames: int = _sheet_frame_count(attack_texture, MINI_BOSS_ATTACK_FRAME_COUNT)
+		_append_sheet_animation(frames, attack_texture, MINI_BOSS_ANIM_ATTACK, attack_frames, 8.8, false)
+	if not frames.has_animation(MINI_BOSS_ANIM_WALK) and frames.has_animation(MINI_BOSS_ANIM_ATTACK):
+		frames.add_animation(MINI_BOSS_ANIM_WALK)
+		frames.set_animation_loop(MINI_BOSS_ANIM_WALK, true)
+		frames.set_animation_speed(MINI_BOSS_ANIM_WALK, 6.6)
+		for i in range(frames.get_frame_count(MINI_BOSS_ANIM_ATTACK)):
+			frames.add_frame(MINI_BOSS_ANIM_WALK, frames.get_frame_texture(MINI_BOSS_ANIM_ATTACK, i))
+	if not frames.has_animation(MINI_BOSS_ANIM_ATTACK) and frames.has_animation(MINI_BOSS_ANIM_WALK):
+		frames.add_animation(MINI_BOSS_ANIM_ATTACK)
+		frames.set_animation_loop(MINI_BOSS_ANIM_ATTACK, false)
+		frames.set_animation_speed(MINI_BOSS_ANIM_ATTACK, 8.8)
+		for i in range(frames.get_frame_count(MINI_BOSS_ANIM_WALK)):
+			frames.add_frame(MINI_BOSS_ANIM_ATTACK, frames.get_frame_texture(MINI_BOSS_ANIM_WALK, i))
+
+	mini_boss_sprite = AnimatedSprite2D.new()
+	mini_boss_sprite.name = "MiniBossSprite"
+	mini_boss_sprite.sprite_frames = frames
+	mini_boss_sprite.animation = MINI_BOSS_ANIM_WALK
+	mini_boss_sprite.centered = true
+	mini_boss_sprite.z_index = 3
+	mini_boss_sprite.scale = Vector2(1.9, 1.9) * ENEMY_SIZE_MULT
+	add_child(mini_boss_sprite)
+	mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+
+func _hide_mini_boss_sprite() -> void:
+	if mini_boss_sprite != null:
+		mini_boss_sprite.visible = false
 
 func _ensure_final_boss_sprite() -> void:
 	if final_boss_sprite != null:
@@ -800,6 +896,8 @@ func _draw() -> void:
 	if kind == EnemyKind.SWARM and swarm_sprite != null and swarm_sprite.visible:
 		draw_sprite_body = false
 	if kind == EnemyKind.RANGED and ranged_sprite != null and ranged_sprite.visible:
+		draw_sprite_body = false
+	if kind == EnemyKind.BOSS and mini_boss_sprite != null and mini_boss_sprite.visible:
 		draw_sprite_body = false
 	if kind == EnemyKind.FINAL_BOSS and final_boss_sprite != null and final_boss_sprite.visible:
 		draw_sprite_body = false

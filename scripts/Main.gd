@@ -138,12 +138,15 @@ const PERFECT_POSITION_SOUND_ENABLED := true
 const SFX_MIX_RATE := 32000.0
 const SFX_BUFFER_LENGTH := 0.16
 const SFX_MIN_INTERVAL := 0.035
-const BGM_PATH := "res://assets/audio/los_tres.mp3"
+const BGM_MENU_PATH := "res://assets/audio/los_tres.mp3"
+const BGM_GAME_PATH := "res://assets/audio/avance_tres_personajes.mp3"
 const BGM_MENU_VOLUME_DB := -23.0
 const BGM_GAME_VOLUME_DB := -16.0
 const BGM_LOOP_CROSSFADE_TIME := 0.72
 const BGM_SILENT_DB := -46.0
 const BGM_VOLUME_SMOOTH := 5.5
+const BGM_MODE_MENU := 0
+const BGM_MODE_GAME := 1
 const UI_CLICK_SFX_PATH := "res://assets/audio/single-beep_C_major.wav"
 const UI_START_CONFIRM_SFX_PATH := "res://assets/audio/end-level-beep_C_major.wav"
 const UI_CLICK_SFX_VOLUME_DB := -18.0
@@ -270,9 +273,11 @@ var spectral_halo_velocities: Array[Vector2] = []
 var spectral_halo_hit_timers: Array[float] = []
 var spectral_halo_heal_timers: Array[float] = []
 var bgm_players: Array[AudioStreamPlayer] = []
-var bgm_stream: AudioStream = null
+var bgm_menu_stream: AudioStream = null
+var bgm_game_stream: AudioStream = null
 var bgm_target_volume_db: float = BGM_MENU_VOLUME_DB
 var bgm_active_player_index: int = 0
+var bgm_active_mode: int = BGM_MODE_MENU
 var bgm_crossfade_active: bool = false
 var bgm_crossfade_timer: float = 0.0
 var bgm_crossfade_from_index: int = 0
@@ -2078,29 +2083,27 @@ func _add_camera_shake(amount: float) -> void:
 
 func _setup_bgm() -> void:
 	bgm_players.clear()
-	bgm_stream = load(BGM_PATH) as AudioStream
-	if bgm_stream == null:
-		push_warning("BGM file not found at %s" % [BGM_PATH])
+	bgm_menu_stream = _load_bgm_stream(BGM_MENU_PATH)
+	bgm_game_stream = _load_bgm_stream(BGM_GAME_PATH)
+	if bgm_game_stream == null:
+		bgm_game_stream = bgm_menu_stream
+	if bgm_menu_stream == null:
+		bgm_menu_stream = bgm_game_stream
+	if bgm_menu_stream == null:
+		push_warning("No BGM stream could be loaded.")
 		return
-
-	# Disable built-in looping and do an explicit crossfade loop to avoid hard cut restarts.
-	var mp3_stream: AudioStreamMP3 = bgm_stream as AudioStreamMP3
-	if mp3_stream != null:
-		mp3_stream.loop = false
-	var ogg_stream: AudioStreamOggVorbis = bgm_stream as AudioStreamOggVorbis
-	if ogg_stream != null:
-		ogg_stream.loop = false
 
 	for i in range(2):
 		var player: AudioStreamPlayer = AudioStreamPlayer.new()
 		player.name = "BGMPlayer%d" % [i]
 		player.bus = "Master"
-		player.stream = bgm_stream
+		player.stream = bgm_menu_stream
 		player.volume_db = BGM_MENU_VOLUME_DB if i == 0 else BGM_SILENT_DB
 		add_child(player)
 		bgm_players.append(player)
 
 	bgm_target_volume_db = BGM_MENU_VOLUME_DB
+	bgm_active_mode = BGM_MODE_MENU
 	bgm_active_player_index = 0
 	bgm_crossfade_active = false
 	bgm_crossfade_timer = 0.0
@@ -2115,21 +2118,59 @@ func _bgm_player_at(index: int) -> AudioStreamPlayer:
 		return null
 	return bgm_players[index]
 
-func _start_bgm_menu() -> void:
+func _load_bgm_stream(path: String) -> AudioStream:
+	var stream: AudioStream = load(path) as AudioStream
+	if stream == null:
+		push_warning("BGM file not found at %s" % [path])
+		return null
+	# Disable built-in looping and do an explicit crossfade loop to avoid hard cut restarts.
+	var mp3_stream: AudioStreamMP3 = stream as AudioStreamMP3
+	if mp3_stream != null:
+		mp3_stream.loop = false
+	var ogg_stream: AudioStreamOggVorbis = stream as AudioStreamOggVorbis
+	if ogg_stream != null:
+		ogg_stream.loop = false
+	return stream
+
+func _active_bgm_stream_for_mode(mode: int) -> AudioStream:
+	if mode == BGM_MODE_GAME:
+		return bgm_game_stream
+	return bgm_menu_stream
+
+func _switch_bgm_mode(mode: int, restart_from_start: bool) -> void:
 	if bgm_players.is_empty():
 		return
-	bgm_target_volume_db = BGM_MENU_VOLUME_DB
+	var desired_stream: AudioStream = _active_bgm_stream_for_mode(mode)
+	if desired_stream == null:
+		return
+	var stream_changed: bool = false
+	for player: AudioStreamPlayer in bgm_players:
+		if player == null:
+			continue
+		if player.stream != desired_stream:
+			player.stream = desired_stream
+			stream_changed = true
+	bgm_active_mode = mode
+	if stream_changed or restart_from_start:
+		_restart_bgm_now()
+		return
 	var active_player: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
 	if active_player != null and not active_player.playing:
 		active_player.volume_db = bgm_target_volume_db
 		active_player.play()
 
+func _start_bgm_menu() -> void:
+	if bgm_players.is_empty():
+		return
+	bgm_target_volume_db = BGM_MENU_VOLUME_DB
+	_switch_bgm_mode(BGM_MODE_MENU, false)
+
 func _start_bgm_game() -> void:
 	if bgm_players.is_empty():
 		return
 	bgm_target_volume_db = BGM_GAME_VOLUME_DB
-	# Restart from the beginning when a run starts.
-	_restart_bgm_now()
+	# Restart from the beginning when a run starts and ensure game track is active.
+	_switch_bgm_mode(BGM_MODE_GAME, true)
 
 func _restart_bgm_now() -> void:
 	if bgm_players.is_empty():

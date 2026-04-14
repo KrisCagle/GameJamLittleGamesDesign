@@ -83,6 +83,12 @@ func _setup_projectile_visual() -> void:
 			return
 		_setup_sheet_projectile_sprite(enemy_texture, ENEMY_RANGED_PROJECTILE_ANIM, ENEMY_RANGED_PROJECTILE_FRAME_COUNT, 10.5, Vector2(1.95, 1.95), Color(1.0, 0.96, 0.94, 1.0))
 		return
+	if style == "enemy_thrower" and team == Team.ENEMY:
+		var thrower_texture: Texture2D = load(ENEMY_RANGED_PROJECTILE_SHEET_PATH)
+		if thrower_texture == null:
+			return
+		_setup_sheet_projectile_sprite(thrower_texture, ENEMY_RANGED_PROJECTILE_ANIM, ENEMY_RANGED_PROJECTILE_FRAME_COUNT, 9.1, Vector2(2.2, 2.2), Color(1.0, 0.86, 0.82, 1.0))
+		return
 	if style == "hero_arrow" and team == Team.HERO:
 		var hero_texture: Texture2D = load(HERO_ARROW_SHEET_PATH)
 		if hero_texture == null:

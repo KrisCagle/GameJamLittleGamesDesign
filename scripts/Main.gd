@@ -13,6 +13,8 @@ const ENEMY_RANGED := 1
 const ENEMY_ELITE := 2
 const ENEMY_BOSS := 3
 const ENEMY_FINAL_BOSS := 4
+const ENEMY_FLYER := 5
+const ENEMY_THROWER := 6
 
 const PROJECTILE_TEAM_HERO := 0
 
@@ -110,13 +112,20 @@ const CAMERA_SHAKE_MAX := 8.0
 const TEAM_POWER_TIGHT_RADIUS := 102.0
 const TEAM_POWER_SPREAD_RADIUS := 268.0
 const TEAM_POWER_SMOOTH := 5.6
-const TEAM_POWER_REGEN_THRESHOLD := 0.56
-const TEAM_POWER_REGEN_PER_SEC := 1.05
 const TEAM_LINK_MAX_DISTANCE := 220.0
 const TEAM_LINK_MAX_ALPHA := 0.26
 const TEAM_CIRCLE_BASE_RADIUS := 116.0
 const TEAM_CIRCLE_MAX_RADIUS := 178.0
 const KILL_FLASH_DURATION := 0.24
+const HEALTH_DROP_LIFETIME := 11.0
+const HEALTH_DROP_DRAG := 190.0
+const HEALTH_DROP_PULL_SPEED := 320.0
+const HEALTH_DROP_ATTRACT_RADIUS := 124.0
+const HEALTH_DROP_PICKUP_PAD := 6.0
+const HEALTH_DROP_SHEET_PATH := "res://assets/pickups/heal_sheet7.png"
+const HEALTH_DROP_SHEET_FRAME_COUNT := 7
+const HEALTH_DROP_SHEET_FPS := 9.2
+const HEALTH_DROP_SHEET_BASE_SCALE := 2.0
 const PERFECT_POSITION_RING_RADIUS := 92.0
 const PERFECT_POSITION_FEEDBACK_DURATION := 0.92
 const PERFECT_POSITION_KILL_FLASH_MULT := 1.34
@@ -126,7 +135,7 @@ const PERFECT_POSITION_IMPACT_FLASH_INTERVAL := 0.05
 const PERFECT_POSITION_IMPACT_FLASH_INTENSITY := 1.08
 const PERFECT_POSITION_SOUND_COOLDOWN := 0.7
 const SPECTRAL_HALO_SPEED := 356.0
-const SPECTRAL_HALO_RADIUS := 14.0
+const SPECTRAL_HALO_RADIUS := 18.0
 const SPECTRAL_HALO_CONTACT_DAMAGE := 21.0
 const SPECTRAL_HALO_HIT_COOLDOWN := 0.14
 const SPECTRAL_HALO_HEAL_RADIUS_BONUS := 16.0
@@ -139,18 +148,24 @@ const SFX_MIX_RATE := 32000.0
 const SFX_BUFFER_LENGTH := 0.16
 const SFX_MIN_INTERVAL := 0.035
 const BGM_MENU_PATH := "res://assets/audio/los_tres.mp3"
-const BGM_GAME_PATH := "res://assets/audio/avance_tres_personajes.mp3"
+const BGM_GAME_PATH := "res://assets/audio/triada_poderoza.mp3"
+const BGM_GAME_LOW_HEALTH_PATH := "res://assets/audio/triada_poderoza_low_health.mp3"
 const BGM_MENU_VOLUME_DB := -23.0
 const BGM_GAME_VOLUME_DB := -16.0
 const BGM_LOOP_CROSSFADE_TIME := 0.72
 const BGM_SILENT_DB := -46.0
 const BGM_VOLUME_SMOOTH := 5.5
+const BGM_LOW_HEALTH_ENTER_RATIO := 0.34
+const BGM_LOW_HEALTH_EXIT_RATIO := 0.48
 const BGM_MODE_MENU := 0
 const BGM_MODE_GAME := 1
-const UI_CLICK_SFX_PATH := "res://assets/audio/single-beep_C_major.wav"
-const UI_START_CONFIRM_SFX_PATH := "res://assets/audio/end-level-beep_C_major.wav"
+const BGM_MODE_GAME_LOW_HEALTH := 2
+const UI_CLICK_SFX_PATH := "res://assets/audio/menu_click_1.mp3"
+const UI_CHARACTER_SELECT_SFX_PATH := "res://assets/audio/character_select_1.mp3"
+const UI_START_GAME_SFX_PATH := "res://assets/audio/start_game_3.mp3"
 const UI_CLICK_SFX_VOLUME_DB := -18.0
-const UI_START_CONFIRM_SFX_VOLUME_DB := -18.0
+const UI_CHARACTER_SELECT_SFX_VOLUME_DB := -18.0
+const UI_START_GAME_SFX_VOLUME_DB := -18.0
 const START_SCREEN_BUTTON_SIZE := Vector2(300.0, 72.0)
 const GAME_OVER_BUTTON_SIZE := Vector2(360.0, 72.0)
 const GAME_OVER_PANEL_SIZE := Vector2(560.0, 320.0)
@@ -254,6 +269,8 @@ var center_ceiling_glow: PointLight2D = null
 var center_ceiling_beam: PointLight2D = null
 var center_ceiling_core: PointLight2D = null
 var center_ceiling_haze: PointLight2D = null
+var health_drop_sheet: Texture2D = null
+var health_drop_frame_size: Vector2 = Vector2.ZERO
 var low_spec_mode: bool = false
 var camera_shake_timer: float = 0.0
 var camera_shake_strength: float = 0.0
@@ -262,6 +279,7 @@ var team_power: float = 0.0
 var team_power_center: Vector2 = Vector2.ZERO
 var team_power_radius: float = TEAM_CIRCLE_BASE_RADIUS
 var kill_flashes: Array[Dictionary] = []
+var health_drops: Array[Dictionary] = []
 var perfect_position_active: bool = false
 var perfect_position_feedback_timer: float = 0.0
 var perfect_position_impact_flash_timer: float = 0.0
@@ -275,9 +293,11 @@ var spectral_halo_heal_timers: Array[float] = []
 var bgm_players: Array[AudioStreamPlayer] = []
 var bgm_menu_stream: AudioStream = null
 var bgm_game_stream: AudioStream = null
+var bgm_game_low_health_stream: AudioStream = null
 var bgm_target_volume_db: float = BGM_MENU_VOLUME_DB
 var bgm_active_player_index: int = 0
 var bgm_active_mode: int = BGM_MODE_MENU
+var bgm_low_health_active: bool = false
 var bgm_crossfade_active: bool = false
 var bgm_crossfade_timer: float = 0.0
 var bgm_crossfade_from_index: int = 0
@@ -286,9 +306,11 @@ var sfx_player: AudioStreamPlayer = null
 var sfx_playback: AudioStreamGeneratorPlayback = null
 var sfx_cooldown_timer: float = 0.0
 var ui_click_player: AudioStreamPlayer = null
-var ui_start_confirm_player: AudioStreamPlayer = null
+var ui_character_select_player: AudioStreamPlayer = null
+var ui_start_game_player: AudioStreamPlayer = null
 var ui_click_stream: AudioStream = null
-var ui_start_confirm_stream: AudioStream = null
+var ui_character_select_stream: AudioStream = null
+var ui_start_game_stream: AudioStream = null
 
 func _ready() -> void:
 	randomize()
@@ -321,6 +343,12 @@ func _ready() -> void:
 		hud_font = load(UI_HUD_FONT_ALT_PATH) as Font
 	_configure_hud_style()
 	floor_texture = load(FLOOR_TEXTURE_PATH) as Texture2D
+	health_drop_sheet = load(HEALTH_DROP_SHEET_PATH) as Texture2D
+	if health_drop_sheet != null:
+		var frame_count: int = max(1, HEALTH_DROP_SHEET_FRAME_COUNT)
+		var frame_w: float = floor(float(health_drop_sheet.get_width()) / float(frame_count))
+		if frame_w > 0.0:
+			health_drop_frame_size = Vector2(frame_w, float(health_drop_sheet.get_height()))
 	_setup_bgm()
 	_start_bgm_menu()
 	_setup_audio_sfx()
@@ -346,6 +374,7 @@ func _ready() -> void:
 	spectral_halo_heal_timers.clear()
 	for _i in range(heroes.size()):
 		spectral_halo_heal_timers.append(0.0)
+	health_drops.clear()
 	perfect_position_active = false
 	perfect_position_feedback_timer = 0.0
 	perfect_position_impact_flash_timer = 0.0
@@ -388,6 +417,7 @@ func _process(delta: float) -> void:
 	sfx_cooldown_timer = maxf(0.0, sfx_cooldown_timer - delta)
 	perfect_position_impact_flash_timer = maxf(0.0, perfect_position_impact_flash_timer - delta)
 	perfect_position_sound_cooldown_timer = maxf(0.0, perfect_position_sound_cooldown_timer - delta)
+	_update_gameplay_bgm_state()
 	_update_bgm_loop(delta)
 
 	if start_screen_active:
@@ -468,6 +498,7 @@ func _process(delta: float) -> void:
 	_spawn_projectiles_from_queue()
 	_update_projectiles(delta)
 	_cleanup_dead_enemies()
+	_update_health_drops(delta)
 	_validate_halo_target()
 	_check_for_game_over()
 	_progress_wave_timing(delta)
@@ -496,7 +527,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 
 		if start_screen_active and (event.keycode == KEY_ENTER or event.keycode == KEY_SPACE):
-			_play_ui_click_sfx()
+			_play_ui_start_game_sfx()
 			_open_tutorial_screen()
 			return
 
@@ -557,7 +588,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if start_screen_active:
 			if _start_screen_button_rect().has_point(event.position):
-				_play_ui_click_sfx()
+				_play_ui_start_game_sfx()
 				_open_tutorial_screen()
 				return
 			return
@@ -1286,15 +1317,73 @@ func _spawn_summoned_enemies_from_queue() -> void:
 
 	summon_spawns.clear()
 
+func _count_active_enemies_by_kind(kind: int) -> int:
+	var count: int = 0
+	for enemy: Enemy in enemies:
+		if enemy.health > 0.0 and int(enemy.kind) == kind:
+			count += 1
+	return count
+
 func _pick_enemy_kind() -> int:
 	var d_wave: int = _difficulty_wave_value()
-	var elite_chance: float = minf(0.035 + float(d_wave) * 0.007, 0.15)
-	var ranged_chance: float = minf(0.055 + float(d_wave) * 0.004, 0.12)
-	var roll: float = randf()
-	if roll < elite_chance:
+	var cycle_wave: int = _current_cycle_wave()
+	var elite_count: int = _count_active_enemies_by_kind(ENEMY_ELITE)
+	var ranged_count: int = _count_active_enemies_by_kind(ENEMY_RANGED)
+	var flyer_count: int = _count_active_enemies_by_kind(ENEMY_FLYER)
+	var thrower_count: int = _count_active_enemies_by_kind(ENEMY_THROWER)
+
+	var elite_cap: int = 3 if cycle_wave < 8 else 4
+	var flyer_cap: int = 0
+	if cycle_wave >= 4:
+		flyer_cap = 3
+	if cycle_wave >= 8:
+		flyer_cap = 5
+	var thrower_cap: int = 0
+	if cycle_wave >= 3:
+		thrower_cap = 2
+	if cycle_wave >= 8:
+		thrower_cap = 4
+	var projectile_enemy_cap: int = 3 if cycle_wave < 6 else (5 if cycle_wave < 10 else 7)
+	var projectile_enemy_count: int = ranged_count + thrower_count
+
+	var weight_swarm: float = 1.0 + float(max(0, cycle_wave - 6)) * 0.03
+	var weight_elite: float = minf(0.035 + float(d_wave) * 0.006, 0.12)
+	var weight_ranged: float = minf(0.06 + float(d_wave) * 0.0032, 0.115)
+	var weight_flyer: float = 0.0
+	var weight_thrower: float = 0.0
+	if cycle_wave >= 4:
+		weight_flyer = minf(0.05 + float(cycle_wave - 4) * 0.004, 0.11)
+	if cycle_wave >= 3:
+		weight_thrower = minf(0.045 + float(cycle_wave - 3) * 0.0038, 0.105)
+
+	if elite_count >= elite_cap:
+		weight_elite = 0.0
+	if flyer_count >= flyer_cap:
+		weight_flyer = 0.0
+	if thrower_count >= thrower_cap or projectile_enemy_count >= projectile_enemy_cap:
+		weight_thrower = 0.0
+	if ranged_count >= projectile_enemy_cap or projectile_enemy_count >= projectile_enemy_cap:
+		weight_ranged = 0.0
+
+	var total_weight: float = weight_swarm + weight_elite + weight_ranged + weight_flyer + weight_thrower
+	if total_weight <= 0.001:
+		return ENEMY_SWARM
+
+	var roll: float = randf() * total_weight
+	if roll < weight_swarm:
+		return ENEMY_SWARM
+	roll -= weight_swarm
+	if roll < weight_elite:
 		return ENEMY_ELITE
-	if roll < elite_chance + ranged_chance:
+	roll -= weight_elite
+	if roll < weight_ranged:
 		return ENEMY_RANGED
+	roll -= weight_ranged
+	if roll < weight_flyer:
+		return ENEMY_FLYER
+	roll -= weight_flyer
+	if roll < weight_thrower:
+		return ENEMY_THROWER
 	return ENEMY_SWARM
 
 func _pick_spawn_target(enemy_kind: int) -> Hero:
@@ -1310,7 +1399,11 @@ func _pick_spawn_target(enemy_kind: int) -> Hero:
 	match enemy_kind:
 		ENEMY_SWARM:
 			preferred_kind = HERO_KNIGHT
+		ENEMY_FLYER:
+			preferred_kind = HERO_ROGUE
 		ENEMY_RANGED:
+			preferred_kind = HERO_RANGER
+		ENEMY_THROWER:
 			preferred_kind = HERO_RANGER
 		ENEMY_ELITE:
 			preferred_kind = HERO_ROGUE
@@ -1357,7 +1450,7 @@ func _random_spawn_point() -> Vector2:
 			return Vector2(arena_rect.end.x - 6.0, y)
 
 func _boss_spawn_point() -> Vector2:
-	return Vector2(arena_rect.position.x + arena_rect.size.x * 0.5, arena_rect.position.y + 18.0)
+	return arena_rect.get_center()
 
 func _clamp_point_to_arena(point: Vector2) -> Vector2:
 	var x: float = clampf(point.x, arena_rect.position.x + 12.0, arena_rect.end.x - 12.0)
@@ -1371,6 +1464,7 @@ func _cleanup_dead_enemies() -> void:
 			var kill_mult: float = PERFECT_POSITION_KILL_FLASH_MULT if perfect_position_active else 1.0
 			_spawn_kill_flash(dead_enemy.global_position, dead_enemy.body_radius, kill_mult)
 			_add_camera_shake(0.2 + team_power * 0.45 + (PERFECT_POSITION_HIT_SHAKE_BONUS if perfect_position_active else 0.0))
+			_maybe_spawn_health_drop(dead_enemy)
 			enemies[i].queue_free()
 			enemies.remove_at(i)
 
@@ -1426,12 +1520,6 @@ func _update_team_power(delta: float) -> void:
 
 	for hero: Hero in heroes:
 		hero.set_team_power(team_power)
-
-	if team_power > TEAM_POWER_REGEN_THRESHOLD:
-		var regen_t: float = (team_power - TEAM_POWER_REGEN_THRESHOLD) / maxf(1.0 - TEAM_POWER_REGEN_THRESHOLD, 0.01)
-		var regen_value: float = TEAM_POWER_REGEN_PER_SEC * regen_t * delta
-		for hero: Hero in alive:
-			hero.heal(regen_value)
 
 func _update_perfect_position_state(delta: float) -> void:
 	perfect_position_feedback_timer = maxf(0.0, perfect_position_feedback_timer - delta)
@@ -1585,19 +1673,23 @@ func _update_spectral_halo(delta: float) -> void:
 	for h in range(spectral_halo_count):
 		if spectral_halo_hit_timers[h] > 0.0:
 			continue
-		var halo_pos: Vector2 = spectral_halo_positions[h]
-		for enemy: Enemy in enemies:
-			if enemy.health <= 0.0:
-				continue
-			var contact_dist: float = SPECTRAL_HALO_RADIUS + enemy.body_radius
-			if halo_pos.distance_squared_to(enemy.global_position) > contact_dist * contact_dist:
-				continue
-			enemy.set_damage_source(halo_pos)
-			var contact_damage: float = SPECTRAL_HALO_CONTACT_DAMAGE * (1.0 + team_power * 0.75)
-			enemy.take_damage(contact_damage)
-			spectral_halo_hit_timers[h] = SPECTRAL_HALO_HIT_COOLDOWN
-			_add_camera_shake(0.14)
-			break
+			var halo_pos: Vector2 = spectral_halo_positions[h]
+			var halo_velocity: Vector2 = Vector2.ZERO
+			if h >= 0 and h < spectral_halo_velocities.size():
+				halo_velocity = spectral_halo_velocities[h]
+			for enemy: Enemy in enemies:
+				if enemy.health <= 0.0:
+					continue
+				var contact_dist: float = SPECTRAL_HALO_RADIUS + enemy.body_radius
+				if halo_pos.distance_squared_to(enemy.global_position) > contact_dist * contact_dist:
+					continue
+				enemy.set_damage_source(halo_pos)
+				enemy.set_damage_direction(halo_velocity)
+				var contact_damage: float = SPECTRAL_HALO_CONTACT_DAMAGE * (1.0 + team_power * 0.75)
+				enemy.take_damage(contact_damage)
+				spectral_halo_hit_timers[h] = SPECTRAL_HALO_HIT_COOLDOWN
+				_add_camera_shake(0.14)
+				break
 
 func _update_projectiles(delta: float) -> void:
 	if projectiles.is_empty():
@@ -1622,6 +1714,7 @@ func _update_projectiles(delta: float) -> void:
 					var impact_dist: float = projectile_radius + enemy.body_radius
 					if projectile_pos.distance_squared_to(enemy.global_position) <= impact_dist * impact_dist:
 						enemy.set_damage_source(projectile_pos)
+						enemy.set_damage_direction(projectile.velocity)
 						enemy.take_damage(projectile_damage)
 						hit = true
 						break
@@ -1720,6 +1813,7 @@ func _continue_after_main_boss() -> void:
 	upgrade_phase_active = false
 	intermission_timer = 0.0
 	spawning = false
+	health_drops.clear()
 	_revive_all_heroes_for_continue()
 	_set_world_visible_for_upgrade(true)
 	_sync_halo_state()
@@ -1736,14 +1830,132 @@ func _revive_all_heroes_for_continue() -> void:
 	]
 	for i in range(heroes.size()):
 		var hero: Hero = heroes[i]
-		if hero.health > 0.0:
-			continue
+		var was_dead: bool = hero.health <= 0.0
 		hero.health = hero.max_health
-		hero.global_position = _clamp_point_to_arena(anchor + revive_offsets[i % revive_offsets.size()])
+		if was_dead:
+			hero.global_position = _clamp_point_to_arena(anchor + revive_offsets[i % revive_offsets.size()])
 		hero.current_velocity = Vector2.ZERO
 		hero.knockback_velocity = Vector2.ZERO
 		hero.pending_damage_source = Vector2.ZERO
 		hero.queue_redraw()
+
+func _maybe_spawn_health_drop(dead_enemy: Enemy) -> void:
+	if dead_enemy == null:
+		return
+	var kind: int = int(dead_enemy.kind)
+	var drop_chance: float = 0.0
+	var heal_amount: float = 0.0
+	var drop_radius: float = 0.0
+	match kind:
+		ENEMY_SWARM:
+			drop_chance = 0.09
+			heal_amount = 10.0
+			drop_radius = 6.0
+		ENEMY_FLYER:
+			drop_chance = 0.1
+			heal_amount = 11.0
+			drop_radius = 6.2
+		ENEMY_RANGED:
+			drop_chance = 0.13
+			heal_amount = 12.0
+			drop_radius = 6.4
+		ENEMY_THROWER:
+			drop_chance = 0.14
+			heal_amount = 13.0
+			drop_radius = 6.6
+		ENEMY_ELITE:
+			drop_chance = 0.24
+			heal_amount = 18.0
+			drop_radius = 7.2
+		ENEMY_BOSS:
+			drop_chance = 1.0
+			heal_amount = 28.0
+			drop_radius = 8.8
+		ENEMY_FINAL_BOSS:
+			drop_chance = 1.0
+			heal_amount = 42.0
+			drop_radius = 10.0
+		_:
+			return
+
+	if randf() > drop_chance:
+		return
+	_spawn_health_drop(dead_enemy.global_position, heal_amount, drop_radius)
+	if kind == ENEMY_BOSS and randf() < 0.45:
+		_spawn_health_drop(dead_enemy.global_position + Vector2(randf_range(-10.0, 10.0), randf_range(-10.0, 10.0)), heal_amount * 0.65, 7.4)
+
+func _spawn_health_drop(position: Vector2, heal_amount: float, drop_radius: float) -> void:
+	if heal_amount <= 0.0:
+		return
+	var burst_velocity: Vector2 = Vector2.RIGHT.rotated(randf() * TAU) * randf_range(22.0, 78.0)
+	var drop: Dictionary = {
+		"position": _clamp_point_to_arena(position),
+		"velocity": burst_velocity,
+		"heal": heal_amount,
+		"radius": maxf(5.0, drop_radius),
+		"life": HEALTH_DROP_LIFETIME,
+		"pulse": randf() * TAU
+	}
+	health_drops.append(drop)
+
+func _update_health_drops(delta: float) -> void:
+	if health_drops.is_empty():
+		return
+	var attract_radius_sq: float = HEALTH_DROP_ATTRACT_RADIUS * HEALTH_DROP_ATTRACT_RADIUS
+	for i in range(health_drops.size() - 1, -1, -1):
+		var drop: Dictionary = health_drops[i]
+		var pos_variant: Variant = drop.get("position", Vector2.ZERO)
+		var vel_variant: Variant = drop.get("velocity", Vector2.ZERO)
+		var pos: Vector2 = pos_variant if pos_variant is Vector2 else Vector2.ZERO
+		var vel: Vector2 = vel_variant if vel_variant is Vector2 else Vector2.ZERO
+		var heal_amount: float = float(drop.get("heal", 0.0))
+		var radius: float = float(drop.get("radius", 6.0))
+		var life: float = float(drop.get("life", HEALTH_DROP_LIFETIME)) - delta
+		if life <= 0.0:
+			health_drops.remove_at(i)
+			continue
+
+		var nearest_hero: Hero = null
+		var nearest_dist_sq: float = INF
+		for hero: Hero in heroes:
+			if hero.health <= 0.0:
+				continue
+			if hero.health >= hero.max_health - 0.5:
+				continue
+			var dist_sq: float = pos.distance_squared_to(hero.global_position)
+			if dist_sq < nearest_dist_sq and dist_sq <= attract_radius_sq:
+				nearest_dist_sq = dist_sq
+				nearest_hero = hero
+		if nearest_hero != null:
+			var to_hero: Vector2 = nearest_hero.global_position - pos
+			if to_hero.length_squared() > 0.0001:
+				vel += to_hero.normalized() * HEALTH_DROP_PULL_SPEED * delta
+				vel = vel.limit_length(HEALTH_DROP_PULL_SPEED)
+
+		pos += vel * delta
+		vel = vel.move_toward(Vector2.ZERO, HEALTH_DROP_DRAG * delta)
+		pos = _clamp_point_to_arena(pos)
+
+		var picked_up: bool = false
+		for hero: Hero in heroes:
+			if hero.health <= 0.0:
+				continue
+			var pickup_dist: float = hero.body_radius + radius + HEALTH_DROP_PICKUP_PAD
+			if pos.distance_squared_to(hero.global_position) > pickup_dist * pickup_dist:
+				continue
+			hero.heal(heal_amount)
+			hero.trigger_halo_switch_feedback()
+			_spawn_kill_flash(pos, radius * 1.6, 0.72)
+			picked_up = true
+			break
+		if picked_up:
+			health_drops.remove_at(i)
+			continue
+
+		drop["position"] = pos
+		drop["velocity"] = vel
+		drop["life"] = life
+		health_drops[i] = drop
 
 func _set_world_visible_for_upgrade(visible: bool) -> void:
 	heroes_root.visible = visible and not start_selection_active and not start_screen_active and not tutorial_screen_active and not boss_victory_prompt_active
@@ -1987,12 +2199,14 @@ func _open_pause_menu() -> void:
 	heroes_root.visible = false
 	enemies_root.visible = false
 	projectiles_root.visible = false
+	_set_bgm_paused_mix(true)
 
 func _resume_from_pause() -> void:
 	pause_menu_active = false
 	heroes_root.visible = true
 	enemies_root.visible = true
 	projectiles_root.visible = true
+	_set_bgm_paused_mix(false)
 
 func _return_to_main_menu() -> void:
 	_stop_bgm()
@@ -2014,7 +2228,7 @@ func _choose_starting_hero(index: int) -> void:
 	if heroes[index].health <= 0.0:
 		return
 
-	_play_ui_start_confirm_sfx()
+	_play_ui_character_select_sfx()
 	start_selection_active = false
 	pause_menu_active = false
 	boss_victory_prompt_active = false
@@ -2085,8 +2299,11 @@ func _setup_bgm() -> void:
 	bgm_players.clear()
 	bgm_menu_stream = _load_bgm_stream(BGM_MENU_PATH)
 	bgm_game_stream = _load_bgm_stream(BGM_GAME_PATH)
+	bgm_game_low_health_stream = _load_bgm_stream(BGM_GAME_LOW_HEALTH_PATH)
 	if bgm_game_stream == null:
 		bgm_game_stream = bgm_menu_stream
+	if bgm_game_low_health_stream == null:
+		bgm_game_low_health_stream = bgm_game_stream
 	if bgm_menu_stream == null:
 		bgm_menu_stream = bgm_game_stream
 	if bgm_menu_stream == null:
@@ -2104,6 +2321,7 @@ func _setup_bgm() -> void:
 
 	bgm_target_volume_db = BGM_MENU_VOLUME_DB
 	bgm_active_mode = BGM_MODE_MENU
+	bgm_low_health_active = false
 	bgm_active_player_index = 0
 	bgm_crossfade_active = false
 	bgm_crossfade_timer = 0.0
@@ -2133,6 +2351,8 @@ func _load_bgm_stream(path: String) -> AudioStream:
 	return stream
 
 func _active_bgm_stream_for_mode(mode: int) -> AudioStream:
+	if mode == BGM_MODE_GAME_LOW_HEALTH:
+		return bgm_game_low_health_stream
 	if mode == BGM_MODE_GAME:
 		return bgm_game_stream
 	return bgm_menu_stream
@@ -2163,14 +2383,26 @@ func _start_bgm_menu() -> void:
 	if bgm_players.is_empty():
 		return
 	bgm_target_volume_db = BGM_MENU_VOLUME_DB
+	bgm_low_health_active = false
 	_switch_bgm_mode(BGM_MODE_MENU, false)
 
 func _start_bgm_game() -> void:
 	if bgm_players.is_empty():
 		return
+	bgm_low_health_active = false
 	bgm_target_volume_db = BGM_GAME_VOLUME_DB
 	# Restart from the beginning when a run starts and ensure game track is active.
 	_switch_bgm_mode(BGM_MODE_GAME, true)
+
+func _set_bgm_paused_mix(paused: bool) -> void:
+	if bgm_players.is_empty():
+		return
+	if paused:
+		# Keep current track, just duck to menu-level volume while paused.
+		bgm_target_volume_db = BGM_MENU_VOLUME_DB
+		return
+	var in_game_mode: bool = bgm_active_mode == BGM_MODE_GAME or bgm_active_mode == BGM_MODE_GAME_LOW_HEALTH
+	bgm_target_volume_db = BGM_GAME_VOLUME_DB if in_game_mode else BGM_MENU_VOLUME_DB
 
 func _restart_bgm_now() -> void:
 	if bgm_players.is_empty():
@@ -2194,9 +2426,72 @@ func _restart_bgm_now() -> void:
 func _stop_bgm() -> void:
 	bgm_crossfade_active = false
 	bgm_crossfade_timer = 0.0
+	bgm_low_health_active = false
 	for player: AudioStreamPlayer in bgm_players:
 		if player != null and player.playing:
 			player.stop()
+
+func _is_gameplay_music_state() -> bool:
+	return not start_screen_active \
+		and not tutorial_screen_active \
+		and not start_selection_active \
+		and not pause_menu_active \
+		and not boss_victory_prompt_active \
+		and not game_over \
+		and not upgrade_phase_active
+
+func _average_alive_hero_health_ratio() -> float:
+	var ratio_sum: float = 0.0
+	var alive_count: int = 0
+	for hero: Hero in heroes:
+		if hero.health <= 0.0:
+			continue
+		ratio_sum += hero.health_ratio()
+		alive_count += 1
+	if alive_count <= 0:
+		return -1.0
+	return ratio_sum / float(alive_count)
+
+func _update_gameplay_bgm_state() -> void:
+	if bgm_players.is_empty():
+		return
+	if not _is_gameplay_music_state():
+		return
+	var avg_ratio: float = _average_alive_hero_health_ratio()
+	if avg_ratio < 0.0:
+		return
+	var should_use_low_track: bool = avg_ratio <= BGM_LOW_HEALTH_ENTER_RATIO
+	if bgm_low_health_active and avg_ratio < BGM_LOW_HEALTH_EXIT_RATIO:
+		should_use_low_track = true
+	if should_use_low_track == bgm_low_health_active:
+		return
+	bgm_low_health_active = should_use_low_track
+	_switch_game_bgm_variant(bgm_low_health_active)
+
+func _switch_game_bgm_variant(low_health: bool) -> void:
+	if bgm_players.size() < 2:
+		return
+	var desired_stream: AudioStream = bgm_game_low_health_stream if low_health else bgm_game_stream
+	if desired_stream == null:
+		return
+	var desired_mode: int = BGM_MODE_GAME_LOW_HEALTH if low_health else BGM_MODE_GAME
+	var active_player: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
+	if active_player != null and active_player.stream == desired_stream and bgm_active_mode == desired_mode:
+		return
+	var next_index: int = 1 - bgm_active_player_index
+	var next_player: AudioStreamPlayer = _bgm_player_at(next_index)
+	if next_player == null:
+		return
+	next_player.stream = desired_stream
+	if next_player.playing:
+		next_player.stop()
+	next_player.volume_db = BGM_SILENT_DB
+	next_player.play()
+	bgm_crossfade_active = true
+	bgm_crossfade_timer = 0.0
+	bgm_crossfade_from_index = bgm_active_player_index
+	bgm_crossfade_to_index = next_index
+	bgm_active_mode = desired_mode
 
 func _update_bgm_loop(delta: float) -> void:
 	if bgm_players.size() < 2:
@@ -2265,7 +2560,8 @@ func _setup_audio_sfx() -> void:
 
 func _setup_ui_sfx() -> void:
 	ui_click_stream = load(UI_CLICK_SFX_PATH) as AudioStream
-	ui_start_confirm_stream = load(UI_START_CONFIRM_SFX_PATH) as AudioStream
+	ui_character_select_stream = load(UI_CHARACTER_SELECT_SFX_PATH) as AudioStream
+	ui_start_game_stream = load(UI_START_GAME_SFX_PATH) as AudioStream
 
 	ui_click_player = AudioStreamPlayer.new()
 	ui_click_player.name = "UIClickSFXPlayer"
@@ -2274,12 +2570,19 @@ func _setup_ui_sfx() -> void:
 	ui_click_player.stream = ui_click_stream
 	add_child(ui_click_player)
 
-	ui_start_confirm_player = AudioStreamPlayer.new()
-	ui_start_confirm_player.name = "UIStartConfirmSFXPlayer"
-	ui_start_confirm_player.volume_db = UI_START_CONFIRM_SFX_VOLUME_DB
-	ui_start_confirm_player.bus = "Master"
-	ui_start_confirm_player.stream = ui_start_confirm_stream
-	add_child(ui_start_confirm_player)
+	ui_character_select_player = AudioStreamPlayer.new()
+	ui_character_select_player.name = "UICharacterSelectSFXPlayer"
+	ui_character_select_player.volume_db = UI_CHARACTER_SELECT_SFX_VOLUME_DB
+	ui_character_select_player.bus = "Master"
+	ui_character_select_player.stream = ui_character_select_stream
+	add_child(ui_character_select_player)
+
+	ui_start_game_player = AudioStreamPlayer.new()
+	ui_start_game_player.name = "UIStartGameSFXPlayer"
+	ui_start_game_player.volume_db = UI_START_GAME_SFX_VOLUME_DB
+	ui_start_game_player.bus = "Master"
+	ui_start_game_player.stream = ui_start_game_stream
+	add_child(ui_start_game_player)
 
 func _play_ui_click_sfx() -> void:
 	if ui_click_player == null or ui_click_stream == null:
@@ -2287,11 +2590,17 @@ func _play_ui_click_sfx() -> void:
 	ui_click_player.pitch_scale = randf_range(0.98, 1.02)
 	ui_click_player.play()
 
-func _play_ui_start_confirm_sfx() -> void:
-	if ui_start_confirm_player == null or ui_start_confirm_stream == null:
+func _play_ui_character_select_sfx() -> void:
+	if ui_character_select_player == null or ui_character_select_stream == null:
 		return
-	ui_start_confirm_player.pitch_scale = 1.0
-	ui_start_confirm_player.play()
+	ui_character_select_player.pitch_scale = 1.0
+	ui_character_select_player.play()
+
+func _play_ui_start_game_sfx() -> void:
+	if ui_start_game_player == null or ui_start_game_stream == null:
+		return
+	ui_start_game_player.pitch_scale = 1.0
+	ui_start_game_player.play()
 
 func _play_hit_sfx(enemy_hit: bool, intensity: float) -> void:
 	if not ENABLE_SFX:
@@ -2515,10 +2824,10 @@ func _apply_upgrade(upgrade_id: int) -> void:
 		UPGRADE_ROGUE_TWIN_FANGS:
 			for hero: Hero in heroes:
 				if hero.kind == HERO_ROGUE:
-					hero.rogue_dual_strike_unlocked = true
-					hero.attack_damage += 1.7
-					hero.attack_cooldown = maxf(0.18, hero.attack_cooldown * 0.93)
-					hero.rogue_halo_damage_bonus_mult += 0.05
+					hero.rogue_zip_unlocked = true
+					hero.rogue_zip_skill_cooldown_reduction += 0.25
+					hero.attack_damage += 1.2
+					hero.attack_cooldown = maxf(0.18, hero.attack_cooldown * 0.95)
 		UPGRADE_TANK_HEAVY_ATTACK:
 			for hero: Hero in heroes:
 				if hero.kind == HERO_KNIGHT:
@@ -2543,10 +2852,12 @@ func _apply_upgrade(upgrade_id: int) -> void:
 				_ensure_spectral_halo_slots()
 		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
 			for hero: Hero in heroes:
-				if hero.kind == HERO_ROGUE and hero.rogue_dual_strike_unlocked:
-					hero.attack_damage += 1.9
-					hero.attack_cooldown = maxf(0.16, hero.attack_cooldown * 0.9)
-					hero.rogue_halo_damage_bonus_mult += 0.08
+				if hero.kind == HERO_ROGUE and hero.rogue_zip_unlocked:
+					hero.rogue_zip_bonus_hops += 1
+					hero.rogue_zip_damage_bonus_mult += 0.16
+					hero.rogue_zip_skill_cooldown_reduction += 0.45
+					hero.attack_damage += 0.8
+					hero.attack_cooldown = maxf(0.16, hero.attack_cooldown * 0.95)
 		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
 			for hero: Hero in heroes:
 				if hero.kind == HERO_KNIGHT and hero.tank_heavy_attack_unlocked:
@@ -2587,7 +2898,7 @@ func _upgrade_name(upgrade_id: int) -> String:
 		UPGRADE_GOLDEN_SURGE:
 			return "Golden Surge"
 		UPGRADE_ROGUE_TWIN_FANGS:
-			return "Twin Fangs"
+			return "Shadow Zip"
 		UPGRADE_TANK_HEAVY_ATTACK:
 			return "Heavy Attack"
 		UPGRADE_RANGER_TRIPLE_ARROWS:
@@ -2597,7 +2908,7 @@ func _upgrade_name(upgrade_id: int) -> String:
 		UPGRADE_HALO_ECHO:
 			return "+1 Halo"
 		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
-			return "Twin Fangs+"
+			return "Shadow Zip+"
 		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
 			return "Heavy Attack+"
 		UPGRADE_RANGER_TRIPLE_ARROWS_PLUS:
@@ -2629,7 +2940,7 @@ func _upgrade_description(upgrade_id: int) -> String:
 		UPGRADE_GOLDEN_SURGE:
 			return "Boss reward: major all-around power spike this run."
 		UPGRADE_ROGUE_TWIN_FANGS:
-			return "Unlock Twin Fangs: two side slashes plus a finishing stab each attack."
+			return "Unlock Rogue Shadow Zip: chain dash hits, return to formation, then wait for cooldown."
 		UPGRADE_TANK_HEAVY_ATTACK:
 			return "Unlock Tank charged slam: huge area strike that punishes swarms."
 		UPGRADE_RANGER_TRIPLE_ARROWS:
@@ -2639,7 +2950,7 @@ func _upgrade_description(upgrade_id: int) -> String:
 		UPGRADE_HALO_ECHO:
 			return "Add another bouncing halo (up to %d total)." % [SPECTRAL_HALO_MAX_COUNT]
 		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
-			return "Twin Fangs upgrade: stronger slash chain and faster rogue attack cadence."
+			return "Shadow Zip upgrade: +1 chain hit, more zip damage, and shorter zip cooldown."
 		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
 			return "Heavy Attack upgrade: stronger slams, faster cadence, bonus tank HP."
 		UPGRADE_RANGER_TRIPLE_ARROWS_PLUS:
@@ -3515,6 +3826,7 @@ func _draw_team_power_overlay() -> void:
 
 	_draw_team_links()
 	_draw_power_circle()
+	_draw_health_drops()
 	_draw_kill_flashes()
 
 func _draw_team_links() -> void:
@@ -3632,6 +3944,41 @@ func _draw_kill_flashes() -> void:
 			draw_line(p0, p1, Color(1.0, 0.9, 0.64, 0.82 * t), 2.0 + 1.8 * t, true)
 		draw_line(pos + Vector2(-draw_radius * 0.22, 0.0), pos + Vector2(draw_radius * 0.22, 0.0), Color(1.0, 0.95, 0.78, 0.88 * t), 2.2, true)
 		draw_line(pos + Vector2(0.0, -draw_radius * 0.22), pos + Vector2(0.0, draw_radius * 0.22), Color(1.0, 0.95, 0.78, 0.88 * t), 2.2, true)
+
+func _draw_health_drops() -> void:
+	if health_drops.is_empty():
+		return
+	var now_sec: float = float(Time.get_ticks_msec()) * 0.001
+	var use_sheet: bool = health_drop_sheet != null and health_drop_frame_size.x > 0.0 and health_drop_frame_size.y > 0.0
+	for drop: Dictionary in health_drops:
+		var pos_variant: Variant = drop.get("position", Vector2.ZERO)
+		var pos: Vector2 = pos_variant if pos_variant is Vector2 else Vector2.ZERO
+		var radius: float = float(drop.get("radius", 6.0))
+		var life: float = float(drop.get("life", HEALTH_DROP_LIFETIME))
+		var pulse_phase: float = float(drop.get("pulse", 0.0))
+		var life_t: float = clampf(life / HEALTH_DROP_LIFETIME, 0.0, 1.0)
+		var pulse: float = 1.0 + sin(now_sec * 3.8 + pulse_phase) * 0.12
+		var r: float = radius * pulse
+		var halo_alpha: float = 0.12 + 0.1 * life_t
+		draw_circle(pos, r + 4.4, Color(0.54, 1.0, 0.56, halo_alpha))
+		if use_sheet:
+			var frame_count: int = max(1, HEALTH_DROP_SHEET_FRAME_COUNT)
+			var frame_idx: int = int(floor(now_sec * HEALTH_DROP_SHEET_FPS + pulse_phase * 0.8)) % frame_count
+			var src_x: float = float(frame_idx) * health_drop_frame_size.x
+			var src_rect: Rect2 = Rect2(src_x, 0.0, health_drop_frame_size.x, health_drop_frame_size.y)
+			var sprite_scale: float = HEALTH_DROP_SHEET_BASE_SCALE + radius * 0.038
+			sprite_scale *= 0.95 + pulse * 0.11
+			var draw_size: Vector2 = health_drop_frame_size * sprite_scale
+			var draw_rect: Rect2 = Rect2(pos - draw_size * 0.5, draw_size)
+			draw_texture_rect_region(health_drop_sheet, draw_rect, src_rect, Color(1.0, 1.0, 1.0, 0.8 + life_t * 0.2), false)
+		else:
+			var core_alpha: float = 0.34 + 0.3 * life_t
+			draw_circle(pos, r + 1.8, Color(0.72, 1.0, 0.76, core_alpha * 0.7))
+			draw_circle(pos, r, Color(0.89, 1.0, 0.9, core_alpha))
+			var cross_half: float = r * 0.44
+			var cross_thickness: float = 1.2 + r * 0.08
+			draw_line(pos + Vector2(-cross_half, 0.0), pos + Vector2(cross_half, 0.0), Color(0.2, 0.7, 0.24, 0.92), cross_thickness, true)
+			draw_line(pos + Vector2(0.0, -cross_half), pos + Vector2(0.0, cross_half), Color(0.2, 0.7, 0.24, 0.92), cross_thickness, true)
 
 func _draw_spectral_halo() -> void:
 	if not spectral_halo_unlocked:

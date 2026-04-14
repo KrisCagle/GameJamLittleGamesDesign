@@ -24,6 +24,10 @@ const KNIGHT_ATTACK_VISUAL_DURATION := 0.68
 const ROGUE_ATTACK_ANIM_NAME := "attack"
 const ROGUE_ATTACK_FRAME_COUNT := 4
 const ROGUE_ATTACK_VISUAL_DURATION := 0.3
+const ROGUE_SWORD_SFX_PATH := "res://assets/audio/rogue_sword_4.wav"
+const ROGUE_DOUBLE_SWORD_SFX_PATH := "res://assets/audio/rogue_double_sword_2.wav"
+const ROGUE_SWORD_SFX_VOLUME_DB := -13.0
+const ROGUE_DOUBLE_SWORD_SFX_VOLUME_DB := -12.0
 
 var kind: int = HeroKind.KNIGHT
 var hero_name: String = "Knight"
@@ -62,6 +66,9 @@ var facing_left: bool = false
 var rogue_halo_damage_bonus_mult: float = 0.0
 var rogue_halo_speed_bonus_mult: float = 0.0
 var rogue_dual_strike_unlocked: bool = false
+var rogue_zip_unlocked: bool = false
+var rogue_zip_bonus_hops: int = 0
+var rogue_zip_damage_bonus_mult: float = 0.0
 var tank_heavy_attack_unlocked: bool = false
 var tank_heavy_charge_timer: float = 0.0
 var tank_heavy_cooldown_timer: float = 0.0
@@ -118,6 +125,17 @@ const ROGUE_TWIN_FANGS_SIDE_ANGLE := 0.36
 const ROGUE_TWIN_FANGS_SIDE_DAMAGE_MULT := 0.62
 const ROGUE_TWIN_FANGS_SIDE_REACH_MULT := 1.02
 const ROGUE_TWIN_FANGS_FINISHER_MULT := 0.22
+const ROGUE_ZIP_CHAIN_HOPS := 3
+const ROGUE_ZIP_HOP_RADIUS := 162.0
+const ROGUE_ZIP_ACTIVATION_RANGE := 228.0
+const ROGUE_ZIP_DAMAGE_FALLOFF := 0.12
+const ROGUE_ZIP_COOLDOWN_MULT := 0.5
+const ROGUE_ZIP_SKILL_COOLDOWN_BASE := 3.5
+const ROGUE_ZIP_SKILL_COOLDOWN_MIN := 1.15
+const ROGUE_ZIP_HIT_SPACING := 13.0
+const ROGUE_ZIP_TRAIL_DURATION := 0.34
+const ROGUE_ZIP_MOVE_SPEED := 1040.0
+const ROGUE_ZIP_HIT_PAUSE := 0.028
 const FACING_VELOCITY_DEADZONE := 12.0
 const FACING_DIRECTION_DEADZONE := 0.12
 const FACING_SWITCH_THRESHOLD := 0.28
@@ -127,6 +145,7 @@ const HALO_SPARKLE_COUNT := 8
 
 var rogue_guard_ally: Hero = null
 var rogue_guard_lock_timer: float = 0.0
+var knight_velocity_smooth: Vector2 = Vector2.ZERO
 var rogue_velocity_smooth: Vector2 = Vector2.ZERO
 var current_velocity: Vector2 = Vector2.ZERO
 var knockback_velocity: Vector2 = Vector2.ZERO
@@ -137,6 +156,18 @@ var bob_amp: float = 0.0
 var bob_freq: float = 0.0
 var facing_lock_timer: float = 0.0
 var facing_switch_cooldown_timer: float = 0.0
+var rogue_zip_trail_timer: float = 0.0
+var rogue_zip_trail_points: Array[Vector2] = []
+var rogue_zip_active: bool = false
+var rogue_zip_hit_pause_timer: float = 0.0
+var rogue_zip_step_index: int = 0
+var rogue_zip_step_points: Array[Vector2] = []
+var rogue_zip_step_targets: Array[Enemy] = []
+var rogue_zip_damage_base: float = 0.0
+var rogue_zip_skill_cooldown_timer: float = 0.0
+var rogue_zip_skill_cooldown_reduction: float = 0.0
+var rogue_sword_player: AudioStreamPlayer = null
+var rogue_double_sword_player: AudioStreamPlayer = null
 
 func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	kind = hero_kind
@@ -193,7 +224,10 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	visual_time = randf() * 100.0
 	rogue_halo_damage_bonus_mult = 0.0
 	rogue_halo_speed_bonus_mult = 0.0
-	rogue_dual_strike_unlocked = false
+	rogue_dual_strike_unlocked = kind == HeroKind.ROGUE
+	rogue_zip_unlocked = false
+	rogue_zip_bonus_hops = 0
+	rogue_zip_damage_bonus_mult = 0.0
 	tank_heavy_attack_unlocked = false
 	tank_heavy_charge_timer = 0.0
 	tank_heavy_cooldown_timer = 0.0
@@ -226,15 +260,31 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	facing_left = false
 	facing_lock_timer = 0.0
 	facing_switch_cooldown_timer = 0.0
+	knight_velocity_smooth = Vector2.ZERO
+	rogue_velocity_smooth = Vector2.ZERO
+	rogue_zip_trail_timer = 0.0
+	rogue_zip_trail_points.clear()
+	rogue_zip_active = false
+	rogue_zip_hit_pause_timer = 0.0
+	rogue_zip_step_index = 0
+	rogue_zip_step_points.clear()
+	rogue_zip_step_targets.clear()
+	rogue_zip_damage_base = 0.0
+	rogue_zip_skill_cooldown_timer = 0.0
+	rogue_zip_skill_cooldown_reduction = 0.0
 	_ensure_hero_sprite()
+	_setup_rogue_attack_sfx()
 	_sync_hero_sprite_visuals()
 	queue_redraw()
 
 func process_tick(delta: float, enemies: Array[Enemy], heroes: Array[Hero], arena_rect: Rect2, projectile_spawns: Array[Dictionary], player_move_input: Vector2) -> void:
 	if health <= 0.0:
+		if rogue_zip_active:
+			_finish_rogue_zip()
 		return
 
 	attack_timer = maxf(0.0, attack_timer - delta)
+	rogue_zip_skill_cooldown_timer = maxf(0.0, rogue_zip_skill_cooldown_timer - delta)
 	facing_lock_timer = maxf(0.0, facing_lock_timer - delta)
 	facing_switch_cooldown_timer = maxf(0.0, facing_switch_cooldown_timer - delta)
 	rogue_guard_lock_timer = maxf(0.0, rogue_guard_lock_timer - delta)
@@ -244,6 +294,8 @@ func process_tick(delta: float, enemies: Array[Enemy], heroes: Array[Hero], aren
 		tank_heavy_charge_timer = maxf(0.0, tank_heavy_charge_timer - delta)
 		if tank_heavy_charge_timer <= 0.0 and kind == HeroKind.KNIGHT and tank_heavy_attack_unlocked:
 			_execute_tank_heavy_attack(enemies)
+	if _update_rogue_zip_motion(delta, arena_rect):
+		return
 
 	var target: Enemy = _select_movement_target(enemies, heroes)
 	if is_player_controlled:
@@ -391,6 +443,12 @@ func _move_by_role(delta: float, target: Enemy, heroes: Array[Hero], enemies: Ar
 		var smooth_t: float = clampf(delta * 12.0, 0.0, 1.0)
 		rogue_velocity_smooth = rogue_velocity_smooth.lerp(velocity, smooth_t)
 		velocity = rogue_velocity_smooth
+	if kind == HeroKind.KNIGHT and not is_player_controlled:
+		var knight_smooth_t: float = clampf(delta * 10.0, 0.0, 1.0)
+		knight_velocity_smooth = knight_velocity_smooth.lerp(velocity, knight_smooth_t)
+		if velocity.length() < move_speed * 0.16 and knight_velocity_smooth.length() < move_speed * 0.11:
+			knight_velocity_smooth = Vector2.ZERO
+		velocity = knight_velocity_smooth
 	velocity += knockback_velocity
 
 	if velocity.length() > move_speed * 1.45:
@@ -415,6 +473,9 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 
 	var distance: float = global_position.distance_to(active_target.global_position)
 	var attack_face_dir: Vector2 = (active_target.global_position - global_position).normalized()
+	var melee_limit: float = attack_range + body_radius + 4.0
+	var can_use_zip: bool = kind == HeroKind.ROGUE and rogue_zip_unlocked and rogue_zip_skill_cooldown_timer <= 0.0
+	var rogue_zip_limit: float = melee_limit + ROGUE_ZIP_ACTIVATION_RANGE + team_power * 92.0
 	if kind == HeroKind.RANGER:
 		var ranged_limit: float = attack_range + 96.0 + team_power * 68.0
 		if distance > ranged_limit:
@@ -427,12 +488,19 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 			distance = global_position.distance_to(active_target.global_position)
 			attack_face_dir = (active_target.global_position - global_position).normalized()
 	else:
-		var melee_limit: float = attack_range + body_radius + 4.0
-		if distance > melee_limit:
-			var melee_fallback: Enemy = _find_nearest_enemy(enemies, melee_limit)
-			if melee_fallback == null:
+		if can_use_zip:
+			if distance > rogue_zip_limit:
+				var zip_fallback: Enemy = _find_nearest_enemy(enemies, rogue_zip_limit)
+				if zip_fallback == null:
+					return
+				active_target = zip_fallback
+				distance = global_position.distance_to(active_target.global_position)
+				attack_face_dir = (active_target.global_position - global_position).normalized()
+		elif distance > melee_limit:
+			var melee_fallback_initial: Enemy = _find_nearest_enemy(enemies, melee_limit)
+			if melee_fallback_initial == null:
 				return
-			active_target = melee_fallback
+			active_target = melee_fallback_initial
 			distance = global_position.distance_to(active_target.global_position)
 			attack_face_dir = (active_target.global_position - global_position).normalized()
 
@@ -504,6 +572,30 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 	if attack_dir.length_squared() <= 0.0001:
 		attack_dir = Vector2.RIGHT
 
+	if kind == HeroKind.ROGUE and can_use_zip:
+		_trigger_rogue_attack_visual()
+		_set_facing_from_direction(attack_dir, _attack_facing_lock_duration())
+		var zip_hits: int = _perform_rogue_zip_chain(active_target, enemies, dealt_damage)
+		if zip_hits > 0:
+			rogue_zip_skill_cooldown_timer = _rogue_zip_skill_cooldown()
+			var zip_cooldown_mult: float = ROGUE_ZIP_COOLDOWN_MULT if has_halo else 0.72
+			var zip_power: float = team_power if has_halo else team_power * 0.55
+			zip_cooldown_mult *= lerpf(1.0, 0.84, zip_power)
+			var zip_surge_cooldown_mult: float = 1.0 / maxf(1.0 + wave_surge_attack_speed_bonus, 0.1)
+			attack_timer = attack_cooldown * zip_cooldown_mult * zip_surge_cooldown_mult
+			return
+
+	if distance > melee_limit:
+		var melee_fallback: Enemy = _find_nearest_enemy(enemies, melee_limit)
+		if melee_fallback == null:
+			return
+		active_target = melee_fallback
+		distance = global_position.distance_to(active_target.global_position)
+		attack_dir = (active_target.global_position - global_position).normalized()
+		if attack_dir.length_squared() <= 0.0001:
+			attack_dir = Vector2.RIGHT
+		attack_face_dir = attack_dir
+
 	if kind == HeroKind.KNIGHT and tank_heavy_attack_unlocked and tank_heavy_charge_timer <= 0.0 and tank_heavy_cooldown_timer <= 0.0:
 		tank_heavy_charge_timer = TANK_HEAVY_CHARGE_TIME
 		tank_heavy_target_point = active_target.global_position
@@ -532,7 +624,9 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 
 	var hit_count: int = _apply_melee_cone_damage(enemies, attack_dir, melee_reach, melee_half_angle, dealt_damage)
 	_start_melee_swing(attack_dir, melee_reach, melee_half_angle, swing_color)
-	if kind == HeroKind.ROGUE and rogue_dual_strike_unlocked:
+	if kind == HeroKind.ROGUE:
+		_play_rogue_sword_sfx()
+	if kind == HeroKind.ROGUE:
 		var side_damage: float = dealt_damage * ROGUE_TWIN_FANGS_SIDE_DAMAGE_MULT
 		var side_half_angle: float = melee_half_angle * 0.92
 		var side_reach: float = melee_reach * ROGUE_TWIN_FANGS_SIDE_REACH_MULT
@@ -545,6 +639,7 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 			active_target.take_damage(dealt_damage * ROGUE_TWIN_FANGS_FINISHER_MULT)
 			hit_count += 1
 		_start_secondary_melee_swing(side_dir_b, side_reach, side_half_angle, Color(0.74, 1.0, 0.84, 0.9))
+		_play_rogue_double_sword_sfx()
 	if hit_count > 0 and kind == HeroKind.KNIGHT and has_halo:
 		for enemy: Enemy in enemies:
 			if enemy.health <= 0.0:
@@ -555,7 +650,7 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 	var cooldown_mult := 1.0
 	if has_halo and kind == HeroKind.ROGUE:
 		cooldown_mult = 0.56
-	if kind == HeroKind.ROGUE and rogue_dual_strike_unlocked:
+	if kind == HeroKind.ROGUE:
 		cooldown_mult *= 0.92
 	var melee_power: float = team_power if has_halo else team_power * 0.35
 	cooldown_mult *= lerpf(1.0, 0.86, melee_power)
@@ -584,6 +679,149 @@ func _apply_melee_cone_damage(enemies: Array[Enemy], attack_dir: Vector2, reach:
 		hit_count += 1
 
 	return hit_count
+
+func _perform_rogue_zip_chain(primary_target: Enemy, enemies: Array[Enemy], base_damage: float) -> int:
+	if primary_target == null or primary_target.health <= 0.0:
+		return 0
+	var origin: Vector2 = global_position
+	var current: Enemy = primary_target
+	var visited: Array[Enemy] = []
+	var step_points: Array[Vector2] = []
+	var step_targets: Array[Enemy] = []
+	var hop_count: int = ROGUE_ZIP_CHAIN_HOPS + rogue_zip_bonus_hops + (1 if has_halo else 0)
+	hop_count = maxi(1, hop_count)
+	var hop_radius: float = ROGUE_ZIP_HOP_RADIUS + team_power * 28.0 + float(rogue_zip_bonus_hops) * 10.0
+
+	for hop in range(hop_count):
+		if current == null or current.health <= 0.0:
+			break
+		step_points.append(current.global_position)
+		step_targets.append(current)
+		visited.append(current)
+		if hop < hop_count - 1:
+			var next_target: Enemy = _find_next_rogue_zip_target(enemies, current.global_position, visited, hop_radius)
+			if next_target == null:
+				break
+			current = next_target
+
+	if step_targets.is_empty():
+		return 0
+	step_points.append(origin)
+	rogue_zip_active = true
+	rogue_zip_hit_pause_timer = 0.0
+	rogue_zip_step_index = 0
+	rogue_zip_step_points = step_points
+	rogue_zip_step_targets = step_targets
+	rogue_zip_damage_base = base_damage * (1.0 + rogue_zip_damage_bonus_mult)
+	rogue_zip_trail_points = [origin]
+	rogue_zip_trail_timer = ROGUE_ZIP_TRAIL_DURATION
+	if not is_player_controlled:
+		rogue_velocity_smooth = Vector2.ZERO
+	return step_targets.size()
+
+func _update_rogue_zip_motion(delta: float, arena_rect: Rect2) -> bool:
+	if kind != HeroKind.ROGUE or not rogue_zip_active:
+		return false
+	if rogue_zip_step_index >= rogue_zip_step_points.size():
+		_finish_rogue_zip()
+		return false
+
+	if rogue_zip_hit_pause_timer > 0.0:
+		rogue_zip_hit_pause_timer = maxf(0.0, rogue_zip_hit_pause_timer - delta)
+		current_velocity = Vector2.ZERO
+		queue_redraw()
+		return true
+
+	var target_pos: Vector2 = rogue_zip_step_points[rogue_zip_step_index]
+	if rogue_zip_step_index < rogue_zip_step_targets.size():
+		var target_enemy: Enemy = rogue_zip_step_targets[rogue_zip_step_index]
+		if target_enemy != null and target_enemy.health > 0.0:
+			target_pos = target_enemy.global_position
+		rogue_zip_step_points[rogue_zip_step_index] = target_pos
+
+	var to_target: Vector2 = target_pos - global_position
+	var dist: float = to_target.length()
+	var move_speed_zip: float = ROGUE_ZIP_MOVE_SPEED * (1.0 + team_power * 0.35 + (0.14 if has_halo else 0.0))
+	var step_dist: float = move_speed_zip * delta
+
+	if dist > step_dist and dist > 1.0:
+		var zip_vel: Vector2 = to_target / maxf(dist, 0.001) * move_speed_zip
+		current_velocity = zip_vel
+		global_position += zip_vel * delta
+		global_position.x = clampf(global_position.x, arena_rect.position.x + body_radius, arena_rect.end.x - body_radius)
+		global_position.y = clampf(global_position.y, arena_rect.position.y + body_radius, arena_rect.end.y - body_radius)
+		_set_facing_from_direction(zip_vel, _attack_facing_lock_duration())
+		rogue_zip_trail_timer = ROGUE_ZIP_TRAIL_DURATION
+		queue_redraw()
+		return true
+
+	# Land on this hop point and resolve hit if this hop targets an enemy.
+	global_position = target_pos
+	global_position.x = clampf(global_position.x, arena_rect.position.x + body_radius, arena_rect.end.x - body_radius)
+	global_position.y = clampf(global_position.y, arena_rect.position.y + body_radius, arena_rect.end.y - body_radius)
+	current_velocity = Vector2.ZERO
+	rogue_zip_trail_points.append(global_position)
+	rogue_zip_trail_timer = ROGUE_ZIP_TRAIL_DURATION
+
+	var did_attack: bool = false
+	if rogue_zip_step_index < rogue_zip_step_targets.size():
+		var hit_enemy: Enemy = rogue_zip_step_targets[rogue_zip_step_index]
+		if hit_enemy != null and hit_enemy.health > 0.0:
+			var hop_idx: int = rogue_zip_step_index
+			var hop_damage_mult: float = maxf(0.58, 1.0 - float(hop_idx) * ROGUE_ZIP_DAMAGE_FALLOFF)
+			hit_enemy.set_damage_source(global_position)
+			hit_enemy.take_damage(rogue_zip_damage_base * hop_damage_mult)
+			var face_dir: Vector2 = hit_enemy.global_position - global_position
+			if face_dir.length_squared() <= 0.0001:
+				face_dir = Vector2.RIGHT
+			_set_facing_from_direction(face_dir, _attack_facing_lock_duration())
+			var zip_reach: float = attack_range + body_radius + ROGUE_ZIP_HIT_SPACING
+			_start_melee_swing(face_dir.normalized(), zip_reach, deg_to_rad(44.0), Color(0.66, 1.0, 0.78, 0.95))
+			_start_secondary_melee_swing(-face_dir.normalized(), zip_reach * 0.9, deg_to_rad(38.0), Color(0.74, 1.0, 0.86, 0.86))
+			_trigger_rogue_attack_visual()
+			did_attack = true
+
+	rogue_zip_step_index += 1
+	if rogue_zip_step_index >= rogue_zip_step_points.size():
+		_finish_rogue_zip()
+	else:
+		if did_attack:
+			rogue_zip_hit_pause_timer = ROGUE_ZIP_HIT_PAUSE
+	queue_redraw()
+	return true
+
+func _finish_rogue_zip() -> void:
+	rogue_zip_active = false
+	rogue_zip_hit_pause_timer = 0.0
+	rogue_zip_step_index = 0
+	rogue_zip_step_points.clear()
+	rogue_zip_step_targets.clear()
+	rogue_zip_damage_base = 0.0
+	rogue_zip_trail_timer = maxf(rogue_zip_trail_timer, ROGUE_ZIP_TRAIL_DURATION * 0.85)
+	if not is_player_controlled:
+		rogue_velocity_smooth = Vector2.ZERO
+
+func _rogue_zip_skill_cooldown() -> float:
+	var cooldown: float = ROGUE_ZIP_SKILL_COOLDOWN_BASE - rogue_zip_skill_cooldown_reduction
+	cooldown = maxf(ROGUE_ZIP_SKILL_COOLDOWN_MIN, cooldown)
+	cooldown *= lerpf(1.0, 0.9, team_power)
+	return cooldown
+
+func _find_next_rogue_zip_target(enemies: Array[Enemy], from_position: Vector2, visited: Array[Enemy], max_dist: float) -> Enemy:
+	var nearest: Enemy = null
+	var best_dist: float = INF
+	for enemy in enemies:
+		if enemy == null or enemy.health <= 0.0:
+			continue
+		if visited.has(enemy):
+			continue
+		var dist: float = from_position.distance_to(enemy.global_position)
+		if dist > max_dist:
+			continue
+		if dist < best_dist:
+			best_dist = dist
+			nearest = enemy
+	return nearest
 
 func _execute_tank_heavy_attack(enemies: Array[Enemy]) -> void:
 	if health <= 0.0:
@@ -985,6 +1223,38 @@ func _ensure_hero_sprite() -> void:
 	add_child(hero_sprite)
 	hero_sprite.play(HERO_ANIM_NAME)
 
+func _setup_rogue_attack_sfx() -> void:
+	if kind != HeroKind.ROGUE:
+		return
+	if rogue_sword_player == null:
+		rogue_sword_player = AudioStreamPlayer.new()
+		rogue_sword_player.name = "RogueSwordSFXPlayer"
+		rogue_sword_player.bus = "Master"
+		rogue_sword_player.volume_db = ROGUE_SWORD_SFX_VOLUME_DB
+		add_child(rogue_sword_player)
+	if rogue_double_sword_player == null:
+		rogue_double_sword_player = AudioStreamPlayer.new()
+		rogue_double_sword_player.name = "RogueDoubleSwordSFXPlayer"
+		rogue_double_sword_player.bus = "Master"
+		rogue_double_sword_player.volume_db = ROGUE_DOUBLE_SWORD_SFX_VOLUME_DB
+		add_child(rogue_double_sword_player)
+	if rogue_sword_player.stream == null:
+		rogue_sword_player.stream = load(ROGUE_SWORD_SFX_PATH) as AudioStream
+	if rogue_double_sword_player.stream == null:
+		rogue_double_sword_player.stream = load(ROGUE_DOUBLE_SWORD_SFX_PATH) as AudioStream
+
+func _play_rogue_sword_sfx() -> void:
+	if kind != HeroKind.ROGUE or rogue_sword_player == null or rogue_sword_player.stream == null:
+		return
+	rogue_sword_player.pitch_scale = randf_range(0.98, 1.03)
+	rogue_sword_player.play()
+
+func _play_rogue_double_sword_sfx() -> void:
+	if kind != HeroKind.ROGUE or rogue_double_sword_player == null or rogue_double_sword_player.stream == null:
+		return
+	rogue_double_sword_player.pitch_scale = randf_range(0.99, 1.02)
+	rogue_double_sword_player.play()
+
 func _append_sheet_animation(frames: SpriteFrames, texture: Texture2D, anim_name: String, fallback_frame_count: int, anim_speed: float, loop: bool) -> bool:
 	if frames == null or texture == null:
 		return false
@@ -1141,6 +1411,8 @@ func set_damage_source(source_position: Vector2) -> void:
 func apply_damage(amount: float) -> void:
 	if health <= 0.0:
 		return
+	if kind == HeroKind.ROGUE and rogue_zip_active:
+		return
 	if has_halo:
 		return
 
@@ -1202,6 +1474,8 @@ func set_player_controlled(active: bool) -> void:
 	is_player_controlled = active
 	if active and kind == HeroKind.ROGUE:
 		rogue_velocity_smooth = Vector2.ZERO
+	if active and kind == HeroKind.KNIGHT:
+		knight_velocity_smooth = Vector2.ZERO
 	queue_redraw()
 
 func trigger_halo_switch_feedback() -> void:
@@ -1238,6 +1512,13 @@ func process_visual_tick(delta: float) -> void:
 		need_redraw = true
 	if tank_heavy_charge_timer > 0.0:
 		need_redraw = true
+	if rogue_zip_active:
+		need_redraw = true
+	elif rogue_zip_trail_timer > 0.0:
+		rogue_zip_trail_timer = maxf(0.0, rogue_zip_trail_timer - delta)
+		need_redraw = true
+		if rogue_zip_trail_timer <= 0.0:
+			rogue_zip_trail_points.clear()
 	if need_redraw:
 		queue_redraw()
 
@@ -1354,6 +1635,26 @@ func _draw() -> void:
 		var pulse_radius: float = body_radius + 8.0 + (1.0 - t) * 22.0
 		var pulse_color: Color = Color(1.0, 0.96, 0.62, 0.45 * t)
 		draw_arc(Vector2(0.0, bob_y), pulse_radius, 0.0, TAU, 36, pulse_color, 6.0 * t)
+
+	if rogue_zip_trail_timer > 0.0:
+		var zip_t: float = rogue_zip_trail_timer / maxf(ROGUE_ZIP_TRAIL_DURATION, 0.001)
+		var render_points: Array[Vector2] = []
+		for p: Vector2 in rogue_zip_trail_points:
+			render_points.append(p)
+		if rogue_zip_active:
+			render_points.append(global_position)
+		if render_points.size() >= 2:
+			var segment_count: int = render_points.size() - 1
+			for i in range(segment_count):
+				var from_world: Vector2 = render_points[i]
+				var to_world: Vector2 = render_points[i + 1]
+				var from_local: Vector2 = from_world - global_position
+				var to_local: Vector2 = to_world - global_position
+				var trail_idx_t: float = float(i) / maxf(float(maxi(1, segment_count - 1)), 1.0)
+				var alpha: float = (0.44 - trail_idx_t * 0.18) * zip_t
+				var width: float = (3.4 - trail_idx_t * 0.8) * zip_t + 0.3
+				draw_line(from_local, to_local, Color(0.62, 1.0, 0.82, alpha), width, true)
+				draw_circle(to_local, 1.5 + 1.2 * zip_t, Color(0.86, 1.0, 0.92, alpha * 1.08))
 
 	if kind == HeroKind.KNIGHT and tank_heavy_attack_unlocked and tank_heavy_charge_timer > 0.0 and health > 0.0:
 		var charge_t: float = tank_heavy_charge_timer / TANK_HEAVY_CHARGE_TIME

@@ -2538,9 +2538,9 @@ func _pause_home_button_rect() -> Rect2:
 func _pause_options_button_rect() -> Rect2:
 	var view_size: Vector2 = _viewport_size()
 	var panel: Rect2 = Rect2((view_size - PAUSE_PANEL_SIZE) * 0.5, PAUSE_PANEL_SIZE)
-	var size: Vector2 = Vector2(220.0, 50.0)
+	var size: Vector2 = Vector2(220.0, 34.0)
 	var x: float = panel.position.x + (panel.size.x - size.x) * 0.5
-	var y: float = panel.position.y + 92.0
+	var y: float = panel.position.y + 94.0
 	return Rect2(
 		Vector2(x, y),
 		size
@@ -4590,7 +4590,7 @@ func _draw() -> void:
 		draw_rect(options_rect, Color(0.14, 0.2, 0.3, 0.94) if not options_hover else Color(0.22, 0.29, 0.41, 0.98), true)
 		draw_rect(options_rect, Color(0.9, 0.95, 1.0, 0.8), false, 2.0)
 		var options_label: String = "OPTIONS"
-		var options_size: int = _fit_font_size_for_text(button_font, options_label, options_rect.size.x - 20.0, 22, 14)
+		var options_size: int = _fit_font_size_for_text(button_font, options_label, options_rect.size.x - 20.0, 18, 12)
 		var options_base_y: float = _centered_text_baseline(options_rect, button_font, options_size)
 		draw_string(button_font, Vector2(options_rect.position.x + 2.0, options_base_y + 2.0), options_label, HORIZONTAL_ALIGNMENT_CENTER, options_rect.size.x, options_size, Color(0.0, 0.0, 0.0, 0.62))
 		draw_string(button_font, Vector2(options_rect.position.x, options_base_y), options_label, HORIZONTAL_ALIGNMENT_CENTER, options_rect.size.x, options_size, Color(0.96, 0.99, 1.0, 0.98))
@@ -4613,8 +4613,6 @@ func _draw_team_power_overlay() -> void:
 	_draw_kill_flashes()
 
 func _draw_team_links() -> void:
-	if low_spec_mode:
-		return
 	var alive: Array[Hero] = []
 	for hero: Hero in heroes:
 		if hero.health > 0.0:
@@ -4639,6 +4637,8 @@ func _draw_team_links() -> void:
 	if perfect_position_active:
 		var glow_pulse: float = 0.7 + 0.3 * sin(float(Time.get_ticks_msec()) * 0.006)
 		for hero: Hero in alive:
+			if not hero.is_player_controlled:
+				continue
 			var glow_radius: float = hero.body_radius + 12.0 + glow_pulse * 4.0
 			draw_circle(hero.global_position, glow_radius, Color(0.74, 0.95, 1.0, 0.045 + glow_pulse * 0.025))
 			draw_arc(hero.global_position, glow_radius + 2.5, 0.0, TAU, 36, Color(0.95, 0.99, 1.0, 0.2 + glow_pulse * 0.12), 1.2)
@@ -4647,17 +4647,6 @@ func _draw_power_circle() -> void:
 	if team_power_center == Vector2.ZERO:
 		return
 	var now: float = float(Time.get_ticks_msec())
-	if low_spec_mode:
-		var lr: float = team_power_radius
-		var fill_alpha: float = 0.014 + team_power * 0.018
-		var inner_alpha: float = 0.08 + team_power * 0.1
-		if perfect_position_active:
-			fill_alpha += 0.012
-			inner_alpha += 0.06
-		draw_circle(team_power_center, lr, Color(0.78, 0.95, 1.0, fill_alpha))
-		draw_arc(team_power_center, lr, 0.0, TAU, 28, Color(0.92, 0.98, 1.0, 0.2 + team_power * 0.15), 1.6)
-		draw_arc(team_power_center, PERFECT_POSITION_RING_RADIUS, 0.0, TAU, 28, Color(0.72, 0.92, 1.0, inner_alpha), 1.4)
-		return
 	# Gentle pulse so it feels alive without drawing too much attention.
 	var breathe: float = 1.0 + sin(now * 0.0014) * (0.012 + team_power * 0.018)
 	var r: float = team_power_radius * breathe
@@ -4749,7 +4738,7 @@ func _draw_health_drops() -> void:
 	if health_drops.is_empty():
 		return
 	var now_sec: float = float(Time.get_ticks_msec()) * 0.001
-	var use_sheet: bool = not low_spec_mode and health_drop_sheet != null and health_drop_frame_size.x > 0.0 and health_drop_frame_size.y > 0.0
+	var use_sheet: bool = health_drop_sheet != null and health_drop_frame_size.x > 0.0 and health_drop_frame_size.y > 0.0
 	for drop: Dictionary in health_drops:
 		var pos_variant: Variant = drop.get("position", Vector2.ZERO)
 		var pos: Vector2 = pos_variant if pos_variant is Vector2 else Vector2.ZERO

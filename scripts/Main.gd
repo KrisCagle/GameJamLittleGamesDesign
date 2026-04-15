@@ -106,6 +106,12 @@ const CAMERA_ZOOM_MENU := Vector2(1.0, 1.0)
 const CAMERA_ZOOM_GAME := Vector2(1.22, 1.22)
 const CAMERA_ZOOM_SMOOTH := 8.5
 const WEB_LOW_SPEC_ENABLED := true
+const WEB_MAX_ACTIVE_ENEMIES := 120
+const WEB_MAX_ACTIVE_PROJECTILES := 160
+const WEB_SPAWN_STEPS_PER_FRAME := 2
+const WEB_SUMMONS_PER_FRAME := 8
+const WEB_PROJECTILE_SPAWNS_PER_FRAME := 40
+const WEB_MAX_KILL_FLASHES := 24
 const WAVE_BASE_ENEMIES := 32
 const WAVE_LINEAR_ENEMIES := 8
 const WAVE_SCALING_ENEMIES := 2.4
@@ -1319,19 +1325,33 @@ func _update_spawning(delta: float) -> void:
 		interval *= WAVE_MINI_SURGE_INTERVAL_MULT
 	elif wave_surge_recovery_timer > 0.0:
 		interval *= 1.24
-	while spawn_timer <= 0.0 and (spawn_remaining > 0 or boss_spawn_pending):
+	var spawn_steps: int = 0
+	var max_spawn_steps: int = WEB_SPAWN_STEPS_PER_FRAME if low_spec_mode else 7
+	while spawn_timer <= 0.0 and (spawn_remaining > 0 or boss_spawn_pending) and spawn_steps < max_spawn_steps:
 		if boss_spawn_pending:
 			_spawn_boss()
 			boss_spawn_pending = false
 			spawn_timer += interval * 1.75
+			spawn_steps += 1
 		elif spawn_remaining > 0:
+			if not _can_spawn_more_enemies():
+				spawn_timer = maxf(spawn_timer + interval * 0.35, 0.02)
+				break
 			var batch_count: int = _next_spawn_batch_size()
+			var spawned_this_batch: int = 0
 			for _i in range(batch_count):
 				if spawn_remaining <= 0:
 					break
-				_spawn_enemy()
-				spawn_remaining -= 1
+				if not _can_spawn_more_enemies():
+					break
+				if _spawn_enemy():
+					spawn_remaining -= 1
+					spawned_this_batch += 1
+			if spawned_this_batch <= 0:
+				spawn_timer = maxf(spawn_timer + interval * 0.35, 0.02)
+				break
 			spawn_timer += interval * randf_range(0.86, 1.18)
+			spawn_steps += 1
 
 	if spawn_remaining <= 0 and not boss_spawn_pending:
 		spawning = false
@@ -1535,7 +1555,9 @@ func _apply_ranger_halo_support(ranger: Hero) -> void:
 		if best_target.global_position.distance_to(ally.global_position) <= 110.0:
 			ally.heal(ranger_halo_heal_amount * 0.3)
 
-func _spawn_enemy() -> void:
+func _spawn_enemy() -> bool:
+	if not _can_spawn_more_enemies():
+		return false
 	var enemy: Enemy = EnemyScript.new()
 	var kind: int = _pick_enemy_kind()
 	var target: Hero = _pick_spawn_target(kind)
@@ -1543,6 +1565,7 @@ func _spawn_enemy() -> void:
 	_connect_enemy_signals(enemy)
 	enemies_root.add_child(enemy)
 	enemies.append(enemy)
+	return true
 
 func _spawn_boss() -> void:
 	var enemy: Enemy = EnemyScript.new()
@@ -1558,8 +1581,13 @@ func _spawn_boss() -> void:
 func _spawn_summoned_enemies_from_queue() -> void:
 	if summon_spawns.is_empty():
 		return
-
+	var pending: Array[Dictionary] = []
+	var spawned_count: int = 0
+	var max_spawns: int = WEB_SUMMONS_PER_FRAME if low_spec_mode else summon_spawns.size()
 	for data: Dictionary in summon_spawns:
+		if spawned_count >= max_spawns or not _can_spawn_more_enemies():
+			pending.append(data)
+			continue
 		var kind: int = int(data.get("kind", ENEMY_SWARM))
 		if kind == ENEMY_BOSS or kind == ENEMY_FINAL_BOSS:
 			kind = ENEMY_SWARM
@@ -1571,8 +1599,9 @@ func _spawn_summoned_enemies_from_queue() -> void:
 		_connect_enemy_signals(enemy)
 		enemies_root.add_child(enemy)
 		enemies.append(enemy)
+		spawned_count += 1
 
-	summon_spawns.clear()
+	summon_spawns = pending
 
 func _count_active_enemies_by_kind(kind: int) -> int:
 	var count: int = 0
@@ -1580,6 +1609,30 @@ func _count_active_enemies_by_kind(kind: int) -> int:
 		if enemy.health > 0.0 and int(enemy.kind) == kind:
 			count += 1
 	return count
+
+func _active_enemy_count() -> int:
+	var count: int = 0
+	for enemy: Enemy in enemies:
+		if enemy.health > 0.0:
+			count += 1
+	return count
+
+func _active_projectile_count() -> int:
+	var count: int = 0
+	for projectile: Projectile in projectiles:
+		if is_instance_valid(projectile):
+			count += 1
+	return count
+
+func _can_spawn_more_enemies() -> bool:
+	if not low_spec_mode:
+		return true
+	return _active_enemy_count() < WEB_MAX_ACTIVE_ENEMIES
+
+func _can_spawn_more_projectiles() -> bool:
+	if not low_spec_mode:
+		return true
+	return _active_projectile_count() < WEB_MAX_ACTIVE_PROJECTILES
 
 func _pick_enemy_kind() -> int:
 	var d_wave: int = _difficulty_wave_value()
@@ -1737,6 +1790,8 @@ func _cleanup_dead_enemies() -> void:
 			enemies.remove_at(i)
 
 func _spawn_kill_flash(position: Vector2, body_radius: float, intensity: float = 1.0) -> void:
+	if low_spec_mode and kill_flashes.size() >= WEB_MAX_KILL_FLASHES:
+		return
 	var clamped_intensity: float = clampf(intensity, 0.7, 2.2)
 	var duration: float = KILL_FLASH_DURATION * lerpf(0.9, 1.35, clampf(clamped_intensity - 1.0, 0.0, 1.0))
 	var flash: Dictionary = {
@@ -1850,12 +1905,19 @@ func _update_perfect_position_state(delta: float) -> void:
 func _spawn_projectiles_from_queue() -> void:
 	if projectile_spawns.is_empty():
 		return
+	var pending: Array[Dictionary] = []
+	var spawned_count: int = 0
+	var max_spawns: int = WEB_PROJECTILE_SPAWNS_PER_FRAME if low_spec_mode else projectile_spawns.size()
 	for data: Dictionary in projectile_spawns:
+		if spawned_count >= max_spawns or not _can_spawn_more_projectiles():
+			pending.append(data)
+			continue
 		var projectile: Projectile = ProjectileScript.new()
 		projectile.configure_from_data(data)
 		projectiles_root.add_child(projectile)
 		projectiles.append(projectile)
-	projectile_spawns.clear()
+		spawned_count += 1
+	projectile_spawns = pending
 
 func _add_spectral_halo_slot(spawn_position: Vector2 = Vector2.ZERO) -> void:
 	if spectral_halo_positions.size() >= SPECTRAL_HALO_MAX_COUNT:
@@ -2928,6 +2990,8 @@ func _update_bgm_loop(delta: float) -> void:
 	var music_db: float = _music_mix_db()
 	var gameplay_mode: bool = _is_gameplay_music_state() and (bgm_active_mode == BGM_MODE_GAME or bgm_active_mode == BGM_MODE_GAME_LOW_HEALTH)
 	var low_target_mix: float = 1.0 if (gameplay_mode and bgm_low_health_active) else 0.0
+	if low_spec_mode:
+		low_target_mix = 0.0
 	var low_mix_t: float = clampf(delta * BGM_LOW_LAYER_BLEND_SPEED, 0.0, 1.0)
 	bgm_low_layer_mix = lerpf(bgm_low_layer_mix, low_target_mix, low_mix_t)
 	if absf(bgm_low_layer_mix - low_target_mix) <= 0.0015:
@@ -2982,7 +3046,7 @@ func _update_bgm_loop(delta: float) -> void:
 	if bgm_low_layer_player == null:
 		return
 	var low_target_db: float = silent_db
-	if gameplay_mode and bgm_game_low_health_stream != null:
+	if gameplay_mode and bgm_game_low_health_stream != null and not low_spec_mode:
 		if bgm_low_layer_player.stream != bgm_game_low_health_stream:
 			bgm_low_layer_player.stream = bgm_game_low_health_stream
 		var ref_player: AudioStreamPlayer = active_player
@@ -3878,6 +3942,7 @@ func _draw_boundary_walls() -> void:
 	var bottom_wall: Rect2 = Rect2(Vector2(left_x, bottom_y - bottom_wall_h), Vector2(arena_rect.size.x, bottom_wall_h))
 	var left_wall: Rect2 = Rect2(Vector2(left_x, top_y), Vector2(side_wall_w, arena_rect.size.y))
 	var right_wall: Rect2 = Rect2(Vector2(right_x - side_wall_w, top_y), Vector2(side_wall_w, arena_rect.size.y))
+	var visible_rect: Rect2 = _viewport_rect_world().grow(220.0)
 
 	# Base wall fill so bounds are always visible.
 	draw_rect(top_wall, Color(0.62, 0.6, 0.66, 0.98), true)
@@ -3893,12 +3958,15 @@ func _draw_boundary_walls() -> void:
 		var src_h: float = float(wall_top_windows_texture.get_height())
 		var ideal_seg_w: float = maxf(72.0, src_w * (top_wall_h / src_h))
 		var seg_count: int = maxi(1, int(round(arena_rect.size.x / ideal_seg_w)))
+		if low_spec_mode:
+			seg_count = maxi(1, int(ceil(float(seg_count) * 0.55)))
 		var seg_w: float = arena_rect.size.x / float(seg_count)
 		for i in range(seg_count):
 			var x_seg: float = left_x + seg_w * float(i)
 			var seg_rect: Rect2 = Rect2(Vector2(x_seg, top_y), Vector2(seg_w, top_wall_h))
-			draw_texture_rect(wall_top_windows_texture, seg_rect, false, Color(1.0, 1.0, 1.0, 0.98))
 			window_segments.append(Vector2(x_seg + seg_w * 0.5, seg_w))
+			if seg_rect.intersects(visible_rect):
+				draw_texture_rect(wall_top_windows_texture, seg_rect, false, Color(1.0, 1.0, 1.0, 0.98))
 	else:
 		var fallback_count: int = maxi(3, ATMOS_RAY_COUNT)
 		var fallback_w: float = arena_rect.size.x / float(fallback_count)
@@ -3914,14 +3982,18 @@ func _draw_boundary_walls() -> void:
 		var y_left: float = side_start_y
 		while y_left < side_end_y:
 			var h_left: float = minf(seg_h, side_end_y - y_left)
-			draw_texture_rect(wall_left_texture, Rect2(Vector2(left_x, y_left), Vector2(side_wall_w, h_left)), false, Color(1.0, 1.0, 1.0, 0.9))
+			var left_seg_rect: Rect2 = Rect2(Vector2(left_x, y_left), Vector2(side_wall_w, h_left))
+			if left_seg_rect.intersects(visible_rect):
+				draw_texture_rect(wall_left_texture, left_seg_rect, false, Color(1.0, 1.0, 1.0, 0.9))
 			y_left += h_left
 	if wall_right_texture != null:
 		var seg_h_r: float = maxf(44.0, float(wall_right_texture.get_height()))
 		var y_right: float = side_start_y
 		while y_right < side_end_y:
 			var h_right: float = minf(seg_h_r, side_end_y - y_right)
-			draw_texture_rect(wall_right_texture, Rect2(Vector2(right_x - side_wall_w, y_right), Vector2(side_wall_w, h_right)), false, Color(1.0, 1.0, 1.0, 0.9))
+			var right_seg_rect: Rect2 = Rect2(Vector2(right_x - side_wall_w, y_right), Vector2(side_wall_w, h_right))
+			if right_seg_rect.intersects(visible_rect):
+				draw_texture_rect(wall_right_texture, right_seg_rect, false, Color(1.0, 1.0, 1.0, 0.9))
 			y_right += h_right
 
 	# Bottom wall strip.
@@ -3930,7 +4002,9 @@ func _draw_boundary_walls() -> void:
 		var x_bottom: float = left_x
 		while x_bottom < right_x:
 			var w_bottom: float = minf(bottom_seg_w, right_x - x_bottom)
-			draw_texture_rect(wall_bottom_texture, Rect2(Vector2(x_bottom, bottom_y - bottom_wall_h), Vector2(w_bottom, bottom_wall_h)), false, Color(1.0, 1.0, 1.0, 0.9))
+			var bottom_seg_rect: Rect2 = Rect2(Vector2(x_bottom, bottom_y - bottom_wall_h), Vector2(w_bottom, bottom_wall_h))
+			if bottom_seg_rect.intersects(visible_rect):
+				draw_texture_rect(wall_bottom_texture, bottom_seg_rect, false, Color(1.0, 1.0, 1.0, 0.9))
 			x_bottom += w_bottom
 
 	# One reflection stack per repeated window segment.
@@ -3944,9 +4018,11 @@ func _draw_boundary_walls() -> void:
 		var shaft_core_h: float = 320.0
 		if window_light_texture != null:
 			var shaft_rect_far: Rect2 = Rect2(Vector2(sx - shaft_far_w * 0.5, shaft_top), Vector2(shaft_far_w, shaft_far_h))
-			draw_texture_rect(window_light_texture, shaft_rect_far, false, Color(1.0, 1.0, 1.0, 0.31))
+			if shaft_rect_far.intersects(visible_rect):
+				draw_texture_rect(window_light_texture, shaft_rect_far, false, Color(1.0, 1.0, 1.0, 0.31))
 			var shaft_rect_core: Rect2 = Rect2(Vector2(sx - shaft_core_w * 0.5, shaft_top + 12.0), Vector2(shaft_core_w, shaft_core_h))
-			draw_texture_rect(window_light_texture, shaft_rect_core, false, Color(1.0, 1.0, 1.0, 0.38))
+			if shaft_rect_core.intersects(visible_rect):
+				draw_texture_rect(window_light_texture, shaft_rect_core, false, Color(1.0, 1.0, 1.0, 0.38))
 		if floor_light_texture != null:
 			var floor_w: float = clampf(seg_w * 0.68, 90.0, 146.0)
 			var floor_h: float = 252.0
@@ -3971,6 +4047,9 @@ func _draw_central_floor_emblem() -> void:
 		draw_line(c + dir * 84.0, c + dir * 160.0, Color(0.74, 0.63, 0.36, 0.36), 1.6)
 
 func _draw_atmospheric_lighting(view_rect: Rect2) -> void:
+	if low_spec_mode:
+		draw_rect(arena_rect, Color(0.02, 0.04, 0.08, 0.04), true)
+		return
 	# Real lighting now comes from Light2D nodes. Keep this layer very subtle.
 	draw_rect(arena_rect, Color(0.02, 0.04, 0.08, 0.05), true)
 
@@ -4534,6 +4613,8 @@ func _draw_team_power_overlay() -> void:
 	_draw_kill_flashes()
 
 func _draw_team_links() -> void:
+	if low_spec_mode:
+		return
 	var alive: Array[Hero] = []
 	for hero: Hero in heroes:
 		if hero.health > 0.0:
@@ -4566,6 +4647,17 @@ func _draw_power_circle() -> void:
 	if team_power_center == Vector2.ZERO:
 		return
 	var now: float = float(Time.get_ticks_msec())
+	if low_spec_mode:
+		var lr: float = team_power_radius
+		var fill_alpha: float = 0.014 + team_power * 0.018
+		var inner_alpha: float = 0.08 + team_power * 0.1
+		if perfect_position_active:
+			fill_alpha += 0.012
+			inner_alpha += 0.06
+		draw_circle(team_power_center, lr, Color(0.78, 0.95, 1.0, fill_alpha))
+		draw_arc(team_power_center, lr, 0.0, TAU, 28, Color(0.92, 0.98, 1.0, 0.2 + team_power * 0.15), 1.6)
+		draw_arc(team_power_center, PERFECT_POSITION_RING_RADIUS, 0.0, TAU, 28, Color(0.72, 0.92, 1.0, inner_alpha), 1.4)
+		return
 	# Gentle pulse so it feels alive without drawing too much attention.
 	var breathe: float = 1.0 + sin(now * 0.0014) * (0.012 + team_power * 0.018)
 	var r: float = team_power_radius * breathe
@@ -4636,24 +4728,28 @@ func _draw_kill_flashes() -> void:
 			pos = p_variant
 		var radius: float = float(flash.get("radius", 24.0))
 		var draw_radius: float = radius * (0.62 + (1.0 - t) * 1.2)
-		var spike_count: int = 8
-		var spin: float = float(Time.get_ticks_msec()) * 0.0018
-		for i in range(spike_count):
-			var angle: float = spin + TAU * float(i) / float(spike_count)
-			var dir: Vector2 = Vector2.RIGHT.rotated(angle)
-			var inner_len: float = draw_radius * 0.2
-			var outer_len: float = draw_radius * (0.66 + (1.0 - t) * 0.42)
-			var p0: Vector2 = pos + dir * inner_len
-			var p1: Vector2 = pos + dir * outer_len
-			draw_line(p0, p1, Color(1.0, 0.9, 0.64, 0.82 * t), 2.0 + 1.8 * t, true)
-		draw_line(pos + Vector2(-draw_radius * 0.22, 0.0), pos + Vector2(draw_radius * 0.22, 0.0), Color(1.0, 0.95, 0.78, 0.88 * t), 2.2, true)
-		draw_line(pos + Vector2(0.0, -draw_radius * 0.22), pos + Vector2(0.0, draw_radius * 0.22), Color(1.0, 0.95, 0.78, 0.88 * t), 2.2, true)
+		if low_spec_mode:
+			draw_circle(pos, draw_radius * 0.5, Color(1.0, 0.93, 0.7, 0.44 * t))
+			draw_arc(pos, draw_radius * 0.72, 0.0, TAU, 20, Color(1.0, 0.95, 0.8, 0.68 * t), 1.6)
+		else:
+			var spike_count: int = 8
+			var spin: float = float(Time.get_ticks_msec()) * 0.0018
+			for i in range(spike_count):
+				var angle: float = spin + TAU * float(i) / float(spike_count)
+				var dir: Vector2 = Vector2.RIGHT.rotated(angle)
+				var inner_len: float = draw_radius * 0.2
+				var outer_len: float = draw_radius * (0.66 + (1.0 - t) * 0.42)
+				var p0: Vector2 = pos + dir * inner_len
+				var p1: Vector2 = pos + dir * outer_len
+				draw_line(p0, p1, Color(1.0, 0.9, 0.64, 0.82 * t), 2.0 + 1.8 * t, true)
+			draw_line(pos + Vector2(-draw_radius * 0.22, 0.0), pos + Vector2(draw_radius * 0.22, 0.0), Color(1.0, 0.95, 0.78, 0.88 * t), 2.2, true)
+			draw_line(pos + Vector2(0.0, -draw_radius * 0.22), pos + Vector2(0.0, draw_radius * 0.22), Color(1.0, 0.95, 0.78, 0.88 * t), 2.2, true)
 
 func _draw_health_drops() -> void:
 	if health_drops.is_empty():
 		return
 	var now_sec: float = float(Time.get_ticks_msec()) * 0.001
-	var use_sheet: bool = health_drop_sheet != null and health_drop_frame_size.x > 0.0 and health_drop_frame_size.y > 0.0
+	var use_sheet: bool = not low_spec_mode and health_drop_sheet != null and health_drop_frame_size.x > 0.0 and health_drop_frame_size.y > 0.0
 	for drop: Dictionary in health_drops:
 		var pos_variant: Variant = drop.get("position", Vector2.ZERO)
 		var pos: Vector2 = pos_variant if pos_variant is Vector2 else Vector2.ZERO

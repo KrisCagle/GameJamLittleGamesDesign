@@ -32,7 +32,7 @@ const RANGER_BOW_SFX_PATH := "res://assets/audio/ranger_bow_shot_2.wav"
 const RANGER_HIT_SFX_PATH := "res://assets/audio/ranger_hit_1.wav"
 const TANK_HIT_SFX_PATH := "res://assets/audio/tank_hit.wav"
 const TANK_ATTACK_SFX_PATH := "res://assets/audio/tank_attack.wav"
-const ROGUE_SWORD_SFX_VOLUME_DB := -13.0
+const ROGUE_SWORD_SFX_VOLUME_DB := -16.0
 const ROGUE_DOUBLE_SWORD_SFX_VOLUME_DB := -12.0
 const ROGUE_ZIP_SFX_VOLUME_DB := -11.5
 const ROGUE_HIT_SFX_VOLUME_DB := -12.0
@@ -40,7 +40,8 @@ const RANGER_BOW_SFX_VOLUME_DB := -8.5
 const RANGER_BOW_SFX_MAX_POLYPHONY := 8
 const RANGER_HIT_SFX_VOLUME_DB := -12.5
 const TANK_HIT_SFX_VOLUME_DB := -11.5
-const TANK_ATTACK_SFX_VOLUME_DB := -12.0
+const TANK_ATTACK_SFX_VOLUME_DB := -8.5
+const TANK_ATTACK_SFX_MAX_POLYPHONY := 6
 
 var kind: int = HeroKind.KNIGHT
 var hero_name: String = "Knight"
@@ -1340,7 +1341,11 @@ func _setup_tank_attack_sfx() -> void:
 		tank_attack_player.name = "TankAttackSFXPlayer"
 		tank_attack_player.bus = "Master"
 		tank_attack_player.volume_db = TANK_ATTACK_SFX_VOLUME_DB
+		tank_attack_player.max_polyphony = TANK_ATTACK_SFX_MAX_POLYPHONY
 		add_child(tank_attack_player)
+	else:
+		tank_attack_player.volume_db = TANK_ATTACK_SFX_VOLUME_DB
+		tank_attack_player.max_polyphony = TANK_ATTACK_SFX_MAX_POLYPHONY
 	if tank_attack_player.stream == null:
 		tank_attack_player.stream = load(TANK_ATTACK_SFX_PATH) as AudioStream
 

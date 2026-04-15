@@ -191,7 +191,7 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			_hide_final_boss_sprite()
 		EnemyKind.BOSS:
 			# Mini-boss (wave 5/15/25...): lower projectile pressure than before.
-			max_health = 620.0 + float(max(0, wave_level - 5)) * 30.0
+			max_health = 760.0 + float(max(0, wave_level - 5)) * 36.0
 			health = max_health
 			move_speed = 58.0
 			attack_range = 260.0

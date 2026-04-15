@@ -26,8 +26,21 @@ const ROGUE_ATTACK_FRAME_COUNT := 4
 const ROGUE_ATTACK_VISUAL_DURATION := 0.3
 const ROGUE_SWORD_SFX_PATH := "res://assets/audio/rogue_sword_4.wav"
 const ROGUE_DOUBLE_SWORD_SFX_PATH := "res://assets/audio/rogue_double_sword_2.wav"
+const ROGUE_ZIP_SFX_PATH := "res://assets/audio/rogue_shadow_zip.wav"
+const ROGUE_HIT_SFX_PATH := "res://assets/audio/rogue_hit_1.wav"
+const RANGER_BOW_SFX_PATH := "res://assets/audio/ranger_bow_shot_2.wav"
+const RANGER_HIT_SFX_PATH := "res://assets/audio/ranger_hit_1.wav"
+const TANK_HIT_SFX_PATH := "res://assets/audio/tank_hit.wav"
+const TANK_ATTACK_SFX_PATH := "res://assets/audio/tank_attack.wav"
 const ROGUE_SWORD_SFX_VOLUME_DB := -13.0
 const ROGUE_DOUBLE_SWORD_SFX_VOLUME_DB := -12.0
+const ROGUE_ZIP_SFX_VOLUME_DB := -11.5
+const ROGUE_HIT_SFX_VOLUME_DB := -12.0
+const RANGER_BOW_SFX_VOLUME_DB := -8.5
+const RANGER_BOW_SFX_MAX_POLYPHONY := 8
+const RANGER_HIT_SFX_VOLUME_DB := -12.5
+const TANK_HIT_SFX_VOLUME_DB := -11.5
+const TANK_ATTACK_SFX_VOLUME_DB := -12.0
 
 var kind: int = HeroKind.KNIGHT
 var hero_name: String = "Knight"
@@ -168,6 +181,12 @@ var rogue_zip_skill_cooldown_timer: float = 0.0
 var rogue_zip_skill_cooldown_reduction: float = 0.0
 var rogue_sword_player: AudioStreamPlayer = null
 var rogue_double_sword_player: AudioStreamPlayer = null
+var rogue_zip_player: AudioStreamPlayer = null
+var rogue_hit_player: AudioStreamPlayer = null
+var ranger_bow_player: AudioStreamPlayer = null
+var ranger_hit_player: AudioStreamPlayer = null
+var tank_hit_player: AudioStreamPlayer = null
+var tank_attack_player: AudioStreamPlayer = null
 
 func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	kind = hero_kind
@@ -274,6 +293,11 @@ func configure(hero_kind: int, spawn_position: Vector2) -> void:
 	rogue_zip_skill_cooldown_reduction = 0.0
 	_ensure_hero_sprite()
 	_setup_rogue_attack_sfx()
+	_setup_rogue_hit_sfx()
+	_setup_ranger_attack_sfx()
+	_setup_ranger_hit_sfx()
+	_setup_tank_hit_sfx()
+	_setup_tank_attack_sfx()
 	_sync_hero_sprite_visuals()
 	queue_redraw()
 
@@ -559,6 +583,7 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 				"homing_target": active_target,
 				"homing_turn_rate": 6.0 if has_halo else 4.2
 			})
+		_play_ranger_bow_sfx()
 		_trigger_ranger_attack_visual()
 		_set_facing_from_direction(attack_face_dir, _attack_facing_lock_duration())
 		var ranged_cooldown_mult: float = 0.86 if has_halo else 1.0
@@ -577,6 +602,7 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 		_set_facing_from_direction(attack_dir, _attack_facing_lock_duration())
 		var zip_hits: int = _perform_rogue_zip_chain(active_target, enemies, dealt_damage)
 		if zip_hits > 0:
+			_play_rogue_zip_sfx()
 			rogue_zip_skill_cooldown_timer = _rogue_zip_skill_cooldown()
 			var zip_cooldown_mult: float = ROGUE_ZIP_COOLDOWN_MULT if has_halo else 0.72
 			var zip_power: float = team_power if has_halo else team_power * 0.55
@@ -624,6 +650,8 @@ func _try_attack(target: Enemy, enemies: Array[Enemy], projectile_spawns: Array[
 
 	var hit_count: int = _apply_melee_cone_damage(enemies, attack_dir, melee_reach, melee_half_angle, dealt_damage)
 	_start_melee_swing(attack_dir, melee_reach, melee_half_angle, swing_color)
+	if kind == HeroKind.KNIGHT:
+		_play_tank_attack_sfx()
 	if kind == HeroKind.ROGUE:
 		_play_rogue_sword_sfx()
 	if kind == HeroKind.ROGUE:
@@ -843,6 +871,7 @@ func _execute_tank_heavy_attack(enemies: Array[Enemy]) -> void:
 		enemy.take_damage(heavy_damage)
 		hit_count += 1
 	_start_melee_swing(attack_dir, heavy_reach, deg_to_rad(172.0), Color(0.74, 0.92, 1.0, 0.96))
+	_play_tank_attack_sfx()
 	if hit_count > 0:
 		for enemy: Enemy in enemies:
 			if enemy.health <= 0.0:
@@ -1238,10 +1267,82 @@ func _setup_rogue_attack_sfx() -> void:
 		rogue_double_sword_player.bus = "Master"
 		rogue_double_sword_player.volume_db = ROGUE_DOUBLE_SWORD_SFX_VOLUME_DB
 		add_child(rogue_double_sword_player)
+	if rogue_zip_player == null:
+		rogue_zip_player = AudioStreamPlayer.new()
+		rogue_zip_player.name = "RogueZipSFXPlayer"
+		rogue_zip_player.bus = "Master"
+		rogue_zip_player.volume_db = ROGUE_ZIP_SFX_VOLUME_DB
+		add_child(rogue_zip_player)
 	if rogue_sword_player.stream == null:
 		rogue_sword_player.stream = load(ROGUE_SWORD_SFX_PATH) as AudioStream
 	if rogue_double_sword_player.stream == null:
 		rogue_double_sword_player.stream = load(ROGUE_DOUBLE_SWORD_SFX_PATH) as AudioStream
+	if rogue_zip_player.stream == null:
+		rogue_zip_player.stream = load(ROGUE_ZIP_SFX_PATH) as AudioStream
+
+func _setup_rogue_hit_sfx() -> void:
+	if kind != HeroKind.ROGUE:
+		return
+	if rogue_hit_player == null:
+		rogue_hit_player = AudioStreamPlayer.new()
+		rogue_hit_player.name = "RogueHitSFXPlayer"
+		rogue_hit_player.bus = "Master"
+		rogue_hit_player.volume_db = ROGUE_HIT_SFX_VOLUME_DB
+		add_child(rogue_hit_player)
+	if rogue_hit_player.stream == null:
+		rogue_hit_player.stream = load(ROGUE_HIT_SFX_PATH) as AudioStream
+
+func _setup_ranger_attack_sfx() -> void:
+	if kind != HeroKind.RANGER:
+		return
+	if ranger_bow_player == null:
+		ranger_bow_player = AudioStreamPlayer.new()
+		ranger_bow_player.name = "RangerBowSFXPlayer"
+		ranger_bow_player.bus = "Master"
+		ranger_bow_player.volume_db = RANGER_BOW_SFX_VOLUME_DB
+		ranger_bow_player.max_polyphony = RANGER_BOW_SFX_MAX_POLYPHONY
+		add_child(ranger_bow_player)
+	else:
+		ranger_bow_player.volume_db = RANGER_BOW_SFX_VOLUME_DB
+		ranger_bow_player.max_polyphony = RANGER_BOW_SFX_MAX_POLYPHONY
+	if ranger_bow_player.stream == null:
+		ranger_bow_player.stream = load(RANGER_BOW_SFX_PATH) as AudioStream
+
+func _setup_ranger_hit_sfx() -> void:
+	if kind != HeroKind.RANGER:
+		return
+	if ranger_hit_player == null:
+		ranger_hit_player = AudioStreamPlayer.new()
+		ranger_hit_player.name = "RangerHitSFXPlayer"
+		ranger_hit_player.bus = "Master"
+		ranger_hit_player.volume_db = RANGER_HIT_SFX_VOLUME_DB
+		add_child(ranger_hit_player)
+	if ranger_hit_player.stream == null:
+		ranger_hit_player.stream = load(RANGER_HIT_SFX_PATH) as AudioStream
+
+func _setup_tank_hit_sfx() -> void:
+	if kind != HeroKind.KNIGHT:
+		return
+	if tank_hit_player == null:
+		tank_hit_player = AudioStreamPlayer.new()
+		tank_hit_player.name = "TankHitSFXPlayer"
+		tank_hit_player.bus = "Master"
+		tank_hit_player.volume_db = TANK_HIT_SFX_VOLUME_DB
+		add_child(tank_hit_player)
+	if tank_hit_player.stream == null:
+		tank_hit_player.stream = load(TANK_HIT_SFX_PATH) as AudioStream
+
+func _setup_tank_attack_sfx() -> void:
+	if kind != HeroKind.KNIGHT:
+		return
+	if tank_attack_player == null:
+		tank_attack_player = AudioStreamPlayer.new()
+		tank_attack_player.name = "TankAttackSFXPlayer"
+		tank_attack_player.bus = "Master"
+		tank_attack_player.volume_db = TANK_ATTACK_SFX_VOLUME_DB
+		add_child(tank_attack_player)
+	if tank_attack_player.stream == null:
+		tank_attack_player.stream = load(TANK_ATTACK_SFX_PATH) as AudioStream
 
 func _play_rogue_sword_sfx() -> void:
 	if kind != HeroKind.ROGUE or rogue_sword_player == null or rogue_sword_player.stream == null:
@@ -1254,6 +1355,42 @@ func _play_rogue_double_sword_sfx() -> void:
 		return
 	rogue_double_sword_player.pitch_scale = randf_range(0.99, 1.02)
 	rogue_double_sword_player.play()
+
+func _play_rogue_zip_sfx() -> void:
+	if kind != HeroKind.ROGUE or rogue_zip_player == null or rogue_zip_player.stream == null:
+		return
+	rogue_zip_player.pitch_scale = randf_range(0.98, 1.03)
+	rogue_zip_player.play()
+
+func _play_rogue_hit_sfx() -> void:
+	if kind != HeroKind.ROGUE or rogue_hit_player == null or rogue_hit_player.stream == null:
+		return
+	rogue_hit_player.pitch_scale = randf_range(0.98, 1.04)
+	rogue_hit_player.play()
+
+func _play_ranger_bow_sfx() -> void:
+	if kind != HeroKind.RANGER or ranger_bow_player == null or ranger_bow_player.stream == null:
+		return
+	ranger_bow_player.pitch_scale = randf_range(0.98, 1.02)
+	ranger_bow_player.play()
+
+func _play_ranger_hit_sfx() -> void:
+	if kind != HeroKind.RANGER or ranger_hit_player == null or ranger_hit_player.stream == null:
+		return
+	ranger_hit_player.pitch_scale = randf_range(0.98, 1.03)
+	ranger_hit_player.play()
+
+func _play_tank_hit_sfx() -> void:
+	if kind != HeroKind.KNIGHT or tank_hit_player == null or tank_hit_player.stream == null:
+		return
+	tank_hit_player.pitch_scale = randf_range(0.97, 1.02)
+	tank_hit_player.play()
+
+func _play_tank_attack_sfx() -> void:
+	if kind != HeroKind.KNIGHT or tank_attack_player == null or tank_attack_player.stream == null:
+		return
+	tank_attack_player.pitch_scale = randf_range(0.98, 1.03)
+	tank_attack_player.play()
 
 func _append_sheet_animation(frames: SpriteFrames, texture: Texture2D, anim_name: String, fallback_frame_count: int, anim_speed: float, loop: bool) -> bool:
 	if frames == null or texture == null:
@@ -1422,6 +1559,12 @@ func apply_damage(amount: float) -> void:
 	elif kind == HeroKind.KNIGHT:
 		incoming *= 0.88
 	health = maxf(0.0, health - incoming)
+	if kind == HeroKind.ROGUE and incoming > 0.0:
+		_play_rogue_hit_sfx()
+	elif kind == HeroKind.RANGER and incoming > 0.0:
+		_play_ranger_hit_sfx()
+	elif kind == HeroKind.KNIGHT and incoming > 0.0:
+		_play_tank_hit_sfx()
 	hit_flash_timer = HIT_FLASH_DURATION
 	var source_position: Vector2 = pending_damage_source
 	pending_damage_source = Vector2.ZERO

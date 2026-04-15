@@ -55,6 +55,8 @@ const HERO_CARD_RANGER_SHEET := "res://assets/heroes/ranger_idle.png"
 const HERO_CARD_ROGUE_SHEET := "res://assets/heroes/rogue_idle.png"
 const START_CARD_TANK_CUSTOM_PATH := "res://assets/ui/select_cards/tank_selectscreen.png"
 const START_CARD_RANGER_CUSTOM_PATH := "res://assets/ui/select_cards/ranger_selectscreen.png"
+const START_CARD_ROGUE_CUSTOM_PATH := "res://assets/ui/select_cards/rogue_selectscreen.png"
+const UPGRADE_CARD_FIELD_PATCH_PATH := "res://assets/ui/upgrade_cards/field_patch.png"
 const UPGRADE_CARD_RANGER_REMEDY_PATH := "res://assets/ui/upgrade_cards/ranger_remedy.png"
 const UPGRADE_CARD_HALO_CONDUCTION_PATH := "res://assets/ui/upgrade_cards/halo_conduction.png"
 const UPGRADE_CARD_GOLDEN_SURGE_PATH := "res://assets/ui/upgrade_cards/golden_surge.png"
@@ -305,6 +307,8 @@ var knight_guard_heal_per_sec: float = 4.0
 var start_card_frames: Dictionary = {}
 var start_card_tank_custom: Texture2D = null
 var start_card_ranger_custom: Texture2D = null
+var start_card_rogue_custom: Texture2D = null
+var upgrade_card_field_patch: Texture2D = null
 var upgrade_card_ranger_remedy: Texture2D = null
 var upgrade_card_halo_conduction: Texture2D = null
 var upgrade_card_golden_surge: Texture2D = null
@@ -840,8 +844,10 @@ func _load_start_card_textures() -> void:
 	start_card_frames[HERO_ROGUE] = _load_start_card_preview_frames(HERO_CARD_ROGUE_SHEET)
 	start_card_tank_custom = load(START_CARD_TANK_CUSTOM_PATH) as Texture2D
 	start_card_ranger_custom = load(START_CARD_RANGER_CUSTOM_PATH) as Texture2D
+	start_card_rogue_custom = load(START_CARD_ROGUE_CUSTOM_PATH) as Texture2D
 
 func _load_upgrade_card_textures() -> void:
+	upgrade_card_field_patch = load(UPGRADE_CARD_FIELD_PATCH_PATH) as Texture2D
 	upgrade_card_ranger_remedy = load(UPGRADE_CARD_RANGER_REMEDY_PATH) as Texture2D
 	upgrade_card_halo_conduction = load(UPGRADE_CARD_HALO_CONDUCTION_PATH) as Texture2D
 	upgrade_card_golden_surge = load(UPGRADE_CARD_GOLDEN_SURGE_PATH) as Texture2D
@@ -863,6 +869,8 @@ func _load_upgrade_card_textures() -> void:
 
 func _custom_upgrade_card_texture(upgrade_id: int) -> Texture2D:
 	match upgrade_id:
+		UPGRADE_FIELD_PATCH:
+			return upgrade_card_field_patch
 		UPGRADE_RANGER_REMEDY:
 			return upgrade_card_ranger_remedy
 		UPGRADE_HALO_FLOW:
@@ -4308,6 +4316,8 @@ func _draw() -> void:
 				custom_card = start_card_tank_custom
 			elif i == HERO_RANGER:
 				custom_card = start_card_ranger_custom
+			elif i == HERO_ROGUE:
+				custom_card = start_card_rogue_custom
 
 			if custom_card != null:
 				var custom_rect: Rect2 = rect.grow(-4.0)

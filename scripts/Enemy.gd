@@ -2,21 +2,55 @@ extends Node2D
 class_name Enemy
 signal impact(position: Vector2, intensity: float)
 
-enum EnemyKind { SWARM, RANGED, ELITE, BOSS, FINAL_BOSS }
+enum EnemyKind { SWARM, RANGED, ELITE, BOSS, FINAL_BOSS, FLYER, THROWER }
 const SWARM_WALK_SPRITE_PATH := "res://assets/enemies/enemy_swarm_walk.png"
 const SWARM_ATTACK_SPRITE_PATH := "res://assets/enemies/enemy_swarm_attack.webp"
 const SWARM_ANIM_WALK := "walk"
 const SWARM_ANIM_ATTACK := "attack"
 const SWARM_FRAME_COUNT := 4
+const FLYER_FLY_SPRITE_PATH := "res://assets/enemies/enemy_flyer_fly.png"
+const FLYER_ATTACK_SPRITE_PATH := "res://assets/enemies/enemy_flyer_attack.png"
+const FLYER_ANIM_FLY := "fly"
+const FLYER_ANIM_ATTACK := "attack"
+const FLYER_FRAME_COUNT := 6
+const ELITE_WALK_SPRITE_PATH := "res://assets/enemies/enemy_elite_walk.png"
+const ELITE_ATTACK_SPRITE_PATH := "res://assets/enemies/enemy_elite_attack.png"
+const ELITE_ANIM_WALK := "walk"
+const ELITE_ANIM_ATTACK := "attack"
+const ELITE_WALK_FRAME_COUNT := 6
+const ELITE_ATTACK_FRAME_COUNT := 4
+const THROWER_RUN_SPRITE_PATH := "res://assets/enemies/enemy_thrower_run.png"
+const THROWER_ATTACK_SPRITE_PATH := "res://assets/enemies/enemy_thrower_attack.png"
+const THROWER_ANIM_RUN := "run"
+const THROWER_ANIM_ATTACK := "attack"
+const THROWER_RUN_FRAME_COUNT := 6
+const THROWER_ATTACK_FRAME_COUNT := 5
 const RANGED_WALK_SPRITE_PATH := "res://assets/enemies/enemy_ranged_walk.png"
 const RANGED_ATTACK_SPRITE_PATH := "res://assets/enemies/enemy_ranged_attack.png"
-const FINAL_BOSS_SPRITE_PATH := "res://assets/enemies/final_boss.png"
+const MINI_BOSS_WALK_SPRITE_PATH := "res://assets/enemies/mini_boss_walk_1.png"
+const MINI_BOSS_ATTACK_SPRITE_PATH := "res://assets/enemies/mini_boss_attack_1.png"
+const FINAL_BOSS_FLY_SPRITE_PATH := "res://assets/enemies/final_boss_fly.png"
+const FINAL_BOSS_SLAM_SPRITE_PATH := "res://assets/enemies/final_boss_slam.png"
+const FINAL_BOSS_FALLBACK_SPRITE_PATH := "res://assets/enemies/final_boss.png"
 const RANGED_ANIM_WALK := "walk"
 const RANGED_ANIM_ATTACK := "attack"
 const RANGED_FRAME_COUNT := 5
+const MINI_BOSS_ANIM_WALK := "walk"
+const MINI_BOSS_ANIM_ATTACK := "attack"
+const MINI_BOSS_WALK_FRAME_COUNT := 6
+const MINI_BOSS_ATTACK_FRAME_COUNT := 4
+const FINAL_BOSS_ANIM_FLY := "fly"
+const FINAL_BOSS_ANIM_SLAM := "slam"
+const FINAL_BOSS_FLY_FRAME_COUNT := 12
+const FINAL_BOSS_SLAM_FRAME_COUNT := 9
+const FINAL_BOSS_VISUAL_SCALE := Vector2(1.82, 1.82)
 const RANGED_FLIP_THRESHOLD := 0.14
 const ENEMY_SIZE_MULT := 1.34
 const ENEMY_MOVE_SPEED_MULT := 0.88
+const ENEMY_POST_WAVE5_SPEED_STEP := 0.012
+const ENEMY_POST_WAVE5_SPEED_MAX := 0.2
+const ENEMY_POST_WAVE5_BOSS_SPEED_STEP := 0.007
+const ENEMY_POST_WAVE5_BOSS_SPEED_MAX := 0.1
 const ENEMY_HIT_FLASH_DURATION := 0.11
 const SHOW_ENEMY_HEALTH_BARS := false
 
@@ -51,13 +85,19 @@ var boss_window_active: bool = false
 var boss_time_alive: float = 0.0
 var boss_tentacle_timer: float = 0.0
 var swarm_sprite: AnimatedSprite2D = null
+var flyer_sprite: AnimatedSprite2D = null
+var elite_sprite: AnimatedSprite2D = null
 var ranged_sprite: AnimatedSprite2D = null
-var final_boss_sprite: Sprite2D = null
+var thrower_sprite: AnimatedSprite2D = null
+var mini_boss_sprite: AnimatedSprite2D = null
+var final_boss_sprite: AnimatedSprite2D = null
 var ranged_facing_left: bool = false
+var thrower_facing_left: bool = false
 var hit_flash_timer: float = 0.0
 var hit_flash_strength: float = 0.0
 var knockback_velocity: Vector2 = Vector2.ZERO
 var pending_damage_source: Vector2 = Vector2.ZERO
+var pending_damage_direction: Vector2 = Vector2.ZERO
 
 func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, wave_strength: int = 1) -> void:
 	kind = enemy_kind
@@ -76,7 +116,11 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			body_radius = 8.0
 			body_color = Color(0.96, 0.34, 0.34)
 			_ensure_swarm_sprite()
+			_hide_flyer_sprite()
+			_hide_elite_sprite()
 			_hide_ranged_sprite()
+			_hide_thrower_sprite()
+			_hide_mini_boss_sprite()
 			_hide_final_boss_sprite()
 		EnemyKind.RANGED:
 			max_health = 56.0 + float(wave_level) * 1.6
@@ -88,7 +132,43 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			body_radius = 11.0
 			body_color = Color(0.98, 0.72, 0.27)
 			_hide_swarm_sprite()
+			_hide_flyer_sprite()
+			_hide_elite_sprite()
 			_ensure_ranged_sprite()
+			_hide_thrower_sprite()
+			_hide_mini_boss_sprite()
+			_hide_final_boss_sprite()
+		EnemyKind.FLYER:
+			max_health = 30.0 + float(wave_level) * 1.45
+			health = max_health
+			move_speed = 152.0 + float(wave_level) * 0.72
+			attack_range = 24.0
+			damage = 7.4 + float(wave_level) * 0.2
+			attack_cooldown = 1.16
+			body_radius = 9.0
+			body_color = Color(0.78, 0.92, 1.0)
+			_hide_swarm_sprite()
+			_ensure_flyer_sprite()
+			_hide_elite_sprite()
+			_hide_ranged_sprite()
+			_hide_thrower_sprite()
+			_hide_mini_boss_sprite()
+			_hide_final_boss_sprite()
+		EnemyKind.THROWER:
+			max_health = 68.0 + float(wave_level) * 2.0
+			health = max_health
+			move_speed = 71.0 + float(wave_level) * 0.34
+			attack_range = 218.0
+			damage = 8.8 + float(wave_level) * 0.24
+			attack_cooldown = 1.72
+			body_radius = 10.0
+			body_color = Color(0.94, 0.38, 0.48)
+			_hide_swarm_sprite()
+			_hide_flyer_sprite()
+			_hide_elite_sprite()
+			_hide_ranged_sprite()
+			_ensure_thrower_sprite()
+			_hide_mini_boss_sprite()
 			_hide_final_boss_sprite()
 		EnemyKind.ELITE:
 			max_health = 120.0 + float(wave_level) * 5.2
@@ -103,13 +183,17 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			elite_window_duration = 0.0
 			elite_window_active = false
 			_hide_swarm_sprite()
+			_hide_flyer_sprite()
+			_ensure_elite_sprite()
 			_hide_ranged_sprite()
+			_hide_thrower_sprite()
+			_hide_mini_boss_sprite()
 			_hide_final_boss_sprite()
 		EnemyKind.BOSS:
 			# Mini-boss (wave 5/15/25...): lower projectile pressure than before.
-			max_health = 330.0 + float(max(0, wave_level - 5)) * 16.0
+			max_health = 760.0 + float(max(0, wave_level - 5)) * 36.0
 			health = max_health
-			move_speed = 54.0
+			move_speed = 58.0
 			attack_range = 260.0
 			damage = 8.4 + float(max(0, wave_level - 5)) * 0.28
 			attack_cooldown = 1.72
@@ -123,12 +207,16 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			boss_window_active = false
 			boss_time_alive = 0.0
 			boss_tentacle_timer = randf_range(4.0, 5.4)
+			_ensure_mini_boss_sprite()
 			_hide_final_boss_sprite()
 			_hide_swarm_sprite()
+			_hide_flyer_sprite()
+			_hide_elite_sprite()
 			_hide_ranged_sprite()
+			_hide_thrower_sprite()
 		EnemyKind.FINAL_BOSS:
 			# Main boss (wave 10/20/30...): higher threat profile and unique patterns.
-			max_health = 1180.0 + float(max(0, wave_level - 10)) * 48.0
+			max_health = 1200.0 + float(max(0, wave_level - 10)) * 62.0
 			health = max_health
 			move_speed = 66.0
 			attack_range = 300.0
@@ -145,17 +233,31 @@ func configure(enemy_kind: int, spawn_position: Vector2, assigned_target: Hero, 
 			boss_time_alive = 0.0
 			boss_tentacle_timer = randf_range(1.5, 2.1)
 			_hide_swarm_sprite()
+			_hide_flyer_sprite()
+			_hide_elite_sprite()
 			_hide_ranged_sprite()
+			_hide_thrower_sprite()
+			_hide_mini_boss_sprite()
 			_ensure_final_boss_sprite()
 
 	attack_timer = randf_range(0.0, attack_cooldown)
 	move_speed *= ENEMY_MOVE_SPEED_MULT
+	if wave_level > 5:
+		var over_wave: float = float(wave_level - 5)
+		var speed_bonus: float = 0.0
+		if kind == EnemyKind.BOSS or kind == EnemyKind.FINAL_BOSS:
+			speed_bonus = minf(ENEMY_POST_WAVE5_BOSS_SPEED_MAX, over_wave * ENEMY_POST_WAVE5_BOSS_SPEED_STEP)
+		else:
+			speed_bonus = minf(ENEMY_POST_WAVE5_SPEED_MAX, over_wave * ENEMY_POST_WAVE5_SPEED_STEP)
+		move_speed *= 1.0 + speed_bonus
 	body_radius *= ENEMY_SIZE_MULT
 	ranged_facing_left = false
+	thrower_facing_left = false
 	hit_flash_timer = 0.0
 	hit_flash_strength = 0.0
 	knockback_velocity = Vector2.ZERO
 	pending_damage_source = Vector2.ZERO
+	pending_damage_direction = Vector2.ZERO
 	target_refresh_timer = randf_range(1.0, 2.1)
 	strafe_dir = -1.0 if randf() < 0.5 else 1.0
 	queue_redraw()
@@ -167,7 +269,7 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 	attack_timer = maxf(0.0, attack_timer - delta)
 	hit_flash_timer = maxf(0.0, hit_flash_timer - delta)
 	_update_sprite_flash()
-	knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 360.0 * delta)
+	knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 320.0 * delta)
 	target_refresh_timer -= delta
 	if target_refresh_timer <= 0.0:
 		_retarget(heroes)
@@ -188,17 +290,42 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 	var direction: Vector2 = to_target.normalized() if dist > 0.001 else Vector2.ZERO
 	if kind == EnemyKind.SWARM and swarm_sprite != null and absf(direction.x) > 0.01:
 		swarm_sprite.flip_h = direction.x < 0.0
+	if kind == EnemyKind.FLYER and flyer_sprite != null and absf(direction.x) > 0.01:
+		flyer_sprite.flip_h = direction.x < 0.0
+	if kind == EnemyKind.ELITE and elite_sprite != null and absf(direction.x) > 0.01:
+		elite_sprite.flip_h = direction.x < 0.0
 	if kind == EnemyKind.RANGED and ranged_sprite != null:
 		if direction.x > RANGED_FLIP_THRESHOLD:
 			ranged_facing_left = false
 		elif direction.x < -RANGED_FLIP_THRESHOLD:
 			ranged_facing_left = true
 		ranged_sprite.flip_h = ranged_facing_left
+	if kind == EnemyKind.THROWER and thrower_sprite != null:
+		if direction.x > RANGED_FLIP_THRESHOLD:
+			thrower_facing_left = false
+		elif direction.x < -RANGED_FLIP_THRESHOLD:
+			thrower_facing_left = true
+		thrower_sprite.flip_h = thrower_facing_left
+	if kind == EnemyKind.BOSS and mini_boss_sprite != null and absf(direction.x) > 0.01:
+		mini_boss_sprite.flip_h = direction.x < 0.0
+	if kind == EnemyKind.FINAL_BOSS and final_boss_sprite != null and absf(direction.x) > 0.01:
+		final_boss_sprite.flip_h = direction.x < 0.0
 	var velocity: Vector2 = Vector2.ZERO
 
 	match kind:
 		EnemyKind.SWARM:
 			velocity = direction * move_speed
+		EnemyKind.FLYER:
+			var desired_fly_dist: float = 106.0
+			if dist > desired_fly_dist * 1.2:
+				velocity = direction * move_speed * 1.08
+			elif dist < desired_fly_dist * 0.64:
+				velocity = -direction * move_speed * 0.74
+			else:
+				var tangent_fly: Vector2 = Vector2(-direction.y, direction.x).normalized()
+				velocity = tangent_fly * move_speed * strafe_dir * 0.9
+			if attack_timer <= attack_cooldown * 0.32 and dist > attack_range * 0.85:
+				velocity += direction * move_speed * 0.42
 		EnemyKind.RANGED:
 			var desired_dist: float = 168.0
 			if dist < desired_dist * 0.74:
@@ -208,6 +335,15 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 			else:
 				var tangent: Vector2 = Vector2(-direction.y, direction.x)
 				velocity = tangent * move_speed * strafe_dir * 0.68
+		EnemyKind.THROWER:
+			var desired_throw_dist: float = 178.0
+			if dist < desired_throw_dist * 0.72:
+				velocity = -direction * move_speed * 0.88
+			elif dist > desired_throw_dist * 1.22:
+				velocity = direction * move_speed * 0.72
+			else:
+				var tangent_throw: Vector2 = Vector2(-direction.y, direction.x)
+				velocity = tangent_throw * move_speed * strafe_dir * 0.58
 		EnemyKind.ELITE:
 			if elite_window_active:
 				velocity = -direction * move_speed * 0.38
@@ -244,6 +380,16 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 		_update_ranged_animation_state(velocity)
 	if kind == EnemyKind.SWARM and swarm_sprite != null:
 		_update_swarm_animation_state(velocity)
+	if kind == EnemyKind.FLYER and flyer_sprite != null:
+		_update_flyer_animation_state(velocity)
+	if kind == EnemyKind.THROWER and thrower_sprite != null:
+		_update_thrower_animation_state(velocity)
+	if kind == EnemyKind.ELITE and elite_sprite != null:
+		_update_elite_animation_state(velocity)
+	if kind == EnemyKind.BOSS and mini_boss_sprite != null:
+		_update_mini_boss_animation_state(velocity)
+	if kind == EnemyKind.FINAL_BOSS and final_boss_sprite != null:
+		_update_final_boss_animation_state(velocity)
 
 	if _is_boss_type():
 		boss_time_alive += delta
@@ -254,7 +400,10 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 
 		if boss_aoe_timer <= 0.0:
 			_emit_boss_projectile_ring(projectile_spawns)
+			if kind == EnemyKind.BOSS:
+				_play_mini_boss_attack_anim()
 			if kind == EnemyKind.FINAL_BOSS:
+				_play_final_boss_attack_anim()
 				_emit_final_boss_tentacle_bloom(projectile_spawns)
 			var aoe_cooldown: float = 0.0
 			if kind == EnemyKind.FINAL_BOSS:
@@ -265,6 +414,8 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 
 		if boss_summon_timer <= 0.0:
 			_queue_boss_summons(summon_spawns)
+			if kind == EnemyKind.BOSS:
+				_play_mini_boss_attack_anim()
 			var summon_cooldown: float = 0.0
 			if kind == EnemyKind.FINAL_BOSS:
 				summon_cooldown = maxf(2.6, 4.2 - boss_time_alive * 0.05)
@@ -274,6 +425,10 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 
 		if boss_volley_timer <= 0.0:
 			_spawn_boss_projectile_volley(target_hero, projectile_spawns)
+			if kind == EnemyKind.BOSS:
+				_play_mini_boss_attack_anim()
+			if kind == EnemyKind.FINAL_BOSS:
+				_play_final_boss_attack_anim()
 			var volley_cooldown: float = 0.0
 			if kind == EnemyKind.FINAL_BOSS:
 				volley_cooldown = 1.02 if not boss_window_active else 1.45
@@ -282,26 +437,45 @@ func process_tick(delta: float, heroes: Array[Hero], arena_rect: Rect2, projecti
 			boss_volley_timer = volley_cooldown + randf_range(-0.15, 0.12)
 
 		if kind == EnemyKind.FINAL_BOSS and boss_tentacle_timer <= 0.0:
+			_play_final_boss_attack_anim()
 			_spawn_final_boss_eye_burst(target_hero, projectile_spawns)
 			boss_tentacle_timer = maxf(1.35, 1.95 - boss_time_alive * 0.016) + randf_range(-0.09, 0.11)
 
 	if attack_timer <= 0.0 and dist <= attack_range and target_hero.health > 0.0:
-		if kind == EnemyKind.RANGED:
+		if kind == EnemyKind.RANGED or kind == EnemyKind.THROWER:
+			var projectile_speed: float = 228.0
+			var projectile_radius: float = 6.2
+			var projectile_life: float = 2.4
+			var projectile_color: Color = Color(1.0, 0.76, 0.34)
+			var projectile_style: String = "enemy_ranged"
+			if kind == EnemyKind.THROWER:
+				projectile_speed = 188.0
+				projectile_radius = 6.8
+				projectile_life = 2.75
+				projectile_color = Color(1.0, 0.58, 0.46)
+				projectile_style = "enemy_thrower"
 			projectile_spawns.append({
 				"team": "enemy",
-				"style": "enemy_ranged",
+				"style": projectile_style,
 				"position": global_position,
 				"target_position": target_hero.global_position,
 				"damage": damage,
-				"speed": 228.0,
-				"radius": 6.2,
-				"life": 2.4,
-				"color": Color(1.0, 0.76, 0.34)
+				"speed": projectile_speed,
+				"radius": projectile_radius,
+				"life": projectile_life,
+				"color": projectile_color
 			})
-			_play_ranged_attack_anim()
-		elif kind == EnemyKind.SWARM or kind == EnemyKind.ELITE:
+			if kind == EnemyKind.THROWER:
+				_play_thrower_attack_anim()
+			else:
+				_play_ranged_attack_anim()
+		elif kind == EnemyKind.SWARM or kind == EnemyKind.ELITE or kind == EnemyKind.FLYER:
 			if kind == EnemyKind.SWARM:
 				_play_swarm_attack_anim()
+			if kind == EnemyKind.FLYER:
+				_play_flyer_attack_anim()
+			if kind == EnemyKind.ELITE:
+				_play_elite_attack_anim()
 			var dealt: float = damage
 			if kind == EnemyKind.ELITE and elite_window_active:
 				dealt *= 0.75
@@ -347,6 +521,118 @@ func _play_swarm_attack_anim() -> void:
 		return
 	swarm_sprite.play(SWARM_ANIM_ATTACK)
 
+func _update_flyer_animation_state(_velocity: Vector2) -> void:
+	if flyer_sprite == null:
+		return
+	if flyer_sprite.animation == FLYER_ANIM_ATTACK:
+		if not flyer_sprite.is_playing():
+			if flyer_sprite.sprite_frames.has_animation(FLYER_ANIM_FLY):
+				flyer_sprite.play(FLYER_ANIM_FLY)
+		return
+	if flyer_sprite.animation != FLYER_ANIM_FLY:
+		if flyer_sprite.sprite_frames.has_animation(FLYER_ANIM_FLY):
+			flyer_sprite.play(FLYER_ANIM_FLY)
+	elif not flyer_sprite.is_playing():
+		flyer_sprite.play(FLYER_ANIM_FLY)
+
+func _play_flyer_attack_anim() -> void:
+	if flyer_sprite == null:
+		return
+	if not flyer_sprite.sprite_frames.has_animation(FLYER_ANIM_ATTACK):
+		return
+	flyer_sprite.play(FLYER_ANIM_ATTACK)
+
+func _update_thrower_animation_state(_velocity: Vector2) -> void:
+	if thrower_sprite == null:
+		return
+	if thrower_sprite.animation == THROWER_ANIM_ATTACK:
+		if not thrower_sprite.is_playing():
+			if thrower_sprite.sprite_frames.has_animation(THROWER_ANIM_RUN):
+				thrower_sprite.play(THROWER_ANIM_RUN)
+		return
+	if thrower_sprite.animation != THROWER_ANIM_RUN:
+		if thrower_sprite.sprite_frames.has_animation(THROWER_ANIM_RUN):
+			thrower_sprite.play(THROWER_ANIM_RUN)
+	elif not thrower_sprite.is_playing():
+		thrower_sprite.play(THROWER_ANIM_RUN)
+
+func _play_thrower_attack_anim() -> void:
+	if thrower_sprite == null:
+		return
+	if not thrower_sprite.sprite_frames.has_animation(THROWER_ANIM_ATTACK):
+		return
+	thrower_sprite.play(THROWER_ANIM_ATTACK)
+
+func _update_elite_animation_state(_velocity: Vector2) -> void:
+	if elite_sprite == null:
+		return
+	if elite_sprite.animation == ELITE_ANIM_ATTACK:
+		if not elite_sprite.is_playing():
+			if elite_sprite.sprite_frames.has_animation(ELITE_ANIM_WALK):
+				elite_sprite.play(ELITE_ANIM_WALK)
+		return
+	if elite_sprite.animation != ELITE_ANIM_WALK:
+		if elite_sprite.sprite_frames.has_animation(ELITE_ANIM_WALK):
+			elite_sprite.play(ELITE_ANIM_WALK)
+	elif not elite_sprite.is_playing():
+		elite_sprite.play(ELITE_ANIM_WALK)
+
+func _play_elite_attack_anim() -> void:
+	if elite_sprite == null:
+		return
+	if not elite_sprite.sprite_frames.has_animation(ELITE_ANIM_ATTACK):
+		return
+	elite_sprite.play(ELITE_ANIM_ATTACK)
+
+func _update_mini_boss_animation_state(velocity: Vector2) -> void:
+	if mini_boss_sprite == null:
+		return
+	if mini_boss_sprite.animation == MINI_BOSS_ANIM_ATTACK:
+		if not mini_boss_sprite.is_playing():
+			if mini_boss_sprite.sprite_frames.has_animation(MINI_BOSS_ANIM_WALK):
+				mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+		return
+	if mini_boss_sprite.animation != MINI_BOSS_ANIM_WALK:
+		if mini_boss_sprite.sprite_frames.has_animation(MINI_BOSS_ANIM_WALK):
+			mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+		return
+	if velocity.length_squared() <= 0.05:
+		if not mini_boss_sprite.is_playing():
+			mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+	else:
+		if not mini_boss_sprite.is_playing():
+			mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+
+func _play_mini_boss_attack_anim() -> void:
+	if mini_boss_sprite == null:
+		return
+	if not mini_boss_sprite.sprite_frames.has_animation(MINI_BOSS_ANIM_ATTACK):
+		return
+	mini_boss_sprite.play(MINI_BOSS_ANIM_ATTACK)
+
+func _update_final_boss_animation_state(_velocity: Vector2) -> void:
+	if final_boss_sprite == null:
+		return
+	if final_boss_sprite.animation == FINAL_BOSS_ANIM_SLAM:
+		if not final_boss_sprite.is_playing():
+			if final_boss_sprite.sprite_frames.has_animation(FINAL_BOSS_ANIM_FLY):
+				final_boss_sprite.play(FINAL_BOSS_ANIM_FLY)
+		return
+	if final_boss_sprite.animation != FINAL_BOSS_ANIM_FLY:
+		if final_boss_sprite.sprite_frames.has_animation(FINAL_BOSS_ANIM_FLY):
+			final_boss_sprite.play(FINAL_BOSS_ANIM_FLY)
+	elif not final_boss_sprite.is_playing():
+		final_boss_sprite.play(FINAL_BOSS_ANIM_FLY)
+
+func _play_final_boss_attack_anim() -> void:
+	if final_boss_sprite == null:
+		return
+	if not final_boss_sprite.sprite_frames.has_animation(FINAL_BOSS_ANIM_SLAM):
+		return
+	if final_boss_sprite.animation == FINAL_BOSS_ANIM_SLAM and final_boss_sprite.is_playing():
+		return
+	final_boss_sprite.play(FINAL_BOSS_ANIM_SLAM)
+
 func _update_sprite_flash() -> void:
 	var flash_t: float = 0.0
 	if ENEMY_HIT_FLASH_DURATION > 0.0:
@@ -355,8 +641,16 @@ func _update_sprite_flash() -> void:
 	var flash_mod: Color = Color(1.0 + flash_strength * 0.55, 1.0 + flash_strength * 0.36, 1.0 + flash_strength * 0.24, 1.0)
 	if swarm_sprite != null:
 		swarm_sprite.modulate = flash_mod
+	if flyer_sprite != null:
+		flyer_sprite.modulate = flash_mod
+	if elite_sprite != null:
+		elite_sprite.modulate = flash_mod
 	if ranged_sprite != null:
 		ranged_sprite.modulate = flash_mod
+	if thrower_sprite != null:
+		thrower_sprite.modulate = flash_mod
+	if mini_boss_sprite != null:
+		mini_boss_sprite.modulate = flash_mod
 	if final_boss_sprite != null:
 		final_boss_sprite.modulate = flash_mod
 
@@ -418,7 +712,11 @@ func _retarget(heroes: Array[Hero]) -> void:
 	match kind:
 		EnemyKind.SWARM:
 			preferred_kind = 0
+		EnemyKind.FLYER:
+			preferred_kind = 2
 		EnemyKind.RANGED:
+			preferred_kind = 1
+		EnemyKind.THROWER:
 			preferred_kind = 1
 		EnemyKind.ELITE:
 			preferred_kind = 2
@@ -479,6 +777,96 @@ func _ensure_swarm_sprite() -> void:
 func _hide_swarm_sprite() -> void:
 	if swarm_sprite != null:
 		swarm_sprite.visible = false
+
+func _ensure_flyer_sprite() -> void:
+	if flyer_sprite != null:
+		flyer_sprite.visible = true
+		if not flyer_sprite.is_playing():
+			flyer_sprite.play(FLYER_ANIM_FLY)
+		return
+
+	var fly_texture: Texture2D = load(FLYER_FLY_SPRITE_PATH)
+	var attack_texture: Texture2D = load(FLYER_ATTACK_SPRITE_PATH)
+	if fly_texture == null and attack_texture == null:
+		return
+
+	var frames: SpriteFrames = SpriteFrames.new()
+	if fly_texture != null:
+		_append_sheet_animation(frames, fly_texture, FLYER_ANIM_FLY, FLYER_FRAME_COUNT, 9.1, true)
+	if attack_texture != null:
+		_append_sheet_animation(frames, attack_texture, FLYER_ANIM_ATTACK, FLYER_FRAME_COUNT, 10.3, false)
+	if not frames.has_animation(FLYER_ANIM_FLY) and frames.has_animation(FLYER_ANIM_ATTACK):
+		frames.add_animation(FLYER_ANIM_FLY)
+		frames.set_animation_loop(FLYER_ANIM_FLY, true)
+		frames.set_animation_speed(FLYER_ANIM_FLY, 9.1)
+		for i in range(frames.get_frame_count(FLYER_ANIM_ATTACK)):
+			frames.add_frame(FLYER_ANIM_FLY, frames.get_frame_texture(FLYER_ANIM_ATTACK, i))
+	if not frames.has_animation(FLYER_ANIM_ATTACK) and frames.has_animation(FLYER_ANIM_FLY):
+		frames.add_animation(FLYER_ANIM_ATTACK)
+		frames.set_animation_loop(FLYER_ANIM_ATTACK, false)
+		frames.set_animation_speed(FLYER_ANIM_ATTACK, 10.3)
+		for i in range(frames.get_frame_count(FLYER_ANIM_FLY)):
+			frames.add_frame(FLYER_ANIM_ATTACK, frames.get_frame_texture(FLYER_ANIM_FLY, i))
+
+	flyer_sprite = AnimatedSprite2D.new()
+	flyer_sprite.name = "FlyerSprite"
+	flyer_sprite.sprite_frames = frames
+	flyer_sprite.animation = FLYER_ANIM_FLY
+	flyer_sprite.centered = true
+	flyer_sprite.z_index = 3
+	flyer_sprite.scale = Vector2(1.16, 1.16) * ENEMY_SIZE_MULT
+	add_child(flyer_sprite)
+	flyer_sprite.play(FLYER_ANIM_FLY)
+
+func _hide_flyer_sprite() -> void:
+	if flyer_sprite != null:
+		flyer_sprite.visible = false
+
+func _ensure_elite_sprite() -> void:
+	if elite_sprite != null:
+		elite_sprite.visible = true
+		if not elite_sprite.is_playing():
+			elite_sprite.play(ELITE_ANIM_WALK)
+		return
+
+	var walk_texture: Texture2D = load(ELITE_WALK_SPRITE_PATH)
+	var attack_texture: Texture2D = load(ELITE_ATTACK_SPRITE_PATH)
+	if walk_texture == null and attack_texture == null:
+		return
+
+	var frames: SpriteFrames = SpriteFrames.new()
+	if walk_texture != null:
+		var walk_frames: int = _sheet_frame_count(walk_texture, ELITE_WALK_FRAME_COUNT)
+		_append_sheet_animation(frames, walk_texture, ELITE_ANIM_WALK, walk_frames, 8.2, true)
+	if attack_texture != null:
+		var attack_frames: int = _sheet_frame_count(attack_texture, ELITE_ATTACK_FRAME_COUNT)
+		_append_sheet_animation(frames, attack_texture, ELITE_ANIM_ATTACK, attack_frames, 9.4, false)
+	if not frames.has_animation(ELITE_ANIM_WALK) and frames.has_animation(ELITE_ANIM_ATTACK):
+		frames.add_animation(ELITE_ANIM_WALK)
+		frames.set_animation_loop(ELITE_ANIM_WALK, true)
+		frames.set_animation_speed(ELITE_ANIM_WALK, 8.2)
+		for i in range(frames.get_frame_count(ELITE_ANIM_ATTACK)):
+			frames.add_frame(ELITE_ANIM_WALK, frames.get_frame_texture(ELITE_ANIM_ATTACK, i))
+	if not frames.has_animation(ELITE_ANIM_ATTACK) and frames.has_animation(ELITE_ANIM_WALK):
+		frames.add_animation(ELITE_ANIM_ATTACK)
+		frames.set_animation_loop(ELITE_ANIM_ATTACK, false)
+		frames.set_animation_speed(ELITE_ANIM_ATTACK, 9.4)
+		for i in range(frames.get_frame_count(ELITE_ANIM_WALK)):
+			frames.add_frame(ELITE_ANIM_ATTACK, frames.get_frame_texture(ELITE_ANIM_WALK, i))
+
+	elite_sprite = AnimatedSprite2D.new()
+	elite_sprite.name = "EliteSprite"
+	elite_sprite.sprite_frames = frames
+	elite_sprite.animation = ELITE_ANIM_WALK
+	elite_sprite.centered = true
+	elite_sprite.z_index = 3
+	elite_sprite.scale = Vector2(1.3, 1.3) * ENEMY_SIZE_MULT
+	add_child(elite_sprite)
+	elite_sprite.play(ELITE_ANIM_WALK)
+
+func _hide_elite_sprite() -> void:
+	if elite_sprite != null:
+		elite_sprite.visible = false
 
 func _sheet_frame_count(texture: Texture2D, fallback: int) -> int:
 	if texture == null:
@@ -562,23 +950,143 @@ func _hide_ranged_sprite() -> void:
 	if ranged_sprite != null:
 		ranged_sprite.visible = false
 
+func _ensure_thrower_sprite() -> void:
+	if thrower_sprite != null:
+		thrower_sprite.visible = true
+		if not thrower_sprite.is_playing():
+			thrower_sprite.play(THROWER_ANIM_RUN)
+		return
+
+	var run_texture: Texture2D = load(THROWER_RUN_SPRITE_PATH)
+	var attack_texture: Texture2D = load(THROWER_ATTACK_SPRITE_PATH)
+	if run_texture == null and attack_texture == null:
+		return
+
+	var frames: SpriteFrames = SpriteFrames.new()
+	if run_texture != null:
+		_append_sheet_animation(frames, run_texture, THROWER_ANIM_RUN, THROWER_RUN_FRAME_COUNT, 7.4, true)
+	if attack_texture != null:
+		_append_sheet_animation(frames, attack_texture, THROWER_ANIM_ATTACK, THROWER_ATTACK_FRAME_COUNT, 8.8, false)
+	if not frames.has_animation(THROWER_ANIM_RUN) and frames.has_animation(THROWER_ANIM_ATTACK):
+		frames.add_animation(THROWER_ANIM_RUN)
+		frames.set_animation_loop(THROWER_ANIM_RUN, true)
+		frames.set_animation_speed(THROWER_ANIM_RUN, 7.4)
+		for i in range(frames.get_frame_count(THROWER_ANIM_ATTACK)):
+			frames.add_frame(THROWER_ANIM_RUN, frames.get_frame_texture(THROWER_ANIM_ATTACK, i))
+	if not frames.has_animation(THROWER_ANIM_ATTACK) and frames.has_animation(THROWER_ANIM_RUN):
+		frames.add_animation(THROWER_ANIM_ATTACK)
+		frames.set_animation_loop(THROWER_ANIM_ATTACK, false)
+		frames.set_animation_speed(THROWER_ANIM_ATTACK, 8.8)
+		for i in range(frames.get_frame_count(THROWER_ANIM_RUN)):
+			frames.add_frame(THROWER_ANIM_ATTACK, frames.get_frame_texture(THROWER_ANIM_RUN, i))
+
+	thrower_sprite = AnimatedSprite2D.new()
+	thrower_sprite.name = "ThrowerSprite"
+	thrower_sprite.sprite_frames = frames
+	thrower_sprite.animation = THROWER_ANIM_RUN
+	thrower_sprite.centered = true
+	thrower_sprite.z_index = 3
+	thrower_sprite.scale = Vector2(1.42, 1.42) * ENEMY_SIZE_MULT
+	add_child(thrower_sprite)
+	thrower_sprite.play(THROWER_ANIM_RUN)
+
+func _hide_thrower_sprite() -> void:
+	if thrower_sprite != null:
+		thrower_sprite.visible = false
+
+func _ensure_mini_boss_sprite() -> void:
+	if mini_boss_sprite != null:
+		mini_boss_sprite.visible = true
+		if not mini_boss_sprite.is_playing():
+			mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+		return
+
+	var walk_texture: Texture2D = load(MINI_BOSS_WALK_SPRITE_PATH)
+	var attack_texture: Texture2D = load(MINI_BOSS_ATTACK_SPRITE_PATH)
+	if walk_texture == null and attack_texture == null:
+		return
+
+	var frames: SpriteFrames = SpriteFrames.new()
+	if walk_texture != null:
+		var walk_frames: int = _sheet_frame_count(walk_texture, MINI_BOSS_WALK_FRAME_COUNT)
+		_append_sheet_animation(frames, walk_texture, MINI_BOSS_ANIM_WALK, walk_frames, 6.6, true)
+	if attack_texture != null:
+		var attack_frames: int = _sheet_frame_count(attack_texture, MINI_BOSS_ATTACK_FRAME_COUNT)
+		_append_sheet_animation(frames, attack_texture, MINI_BOSS_ANIM_ATTACK, attack_frames, 8.8, false)
+	if not frames.has_animation(MINI_BOSS_ANIM_WALK) and frames.has_animation(MINI_BOSS_ANIM_ATTACK):
+		frames.add_animation(MINI_BOSS_ANIM_WALK)
+		frames.set_animation_loop(MINI_BOSS_ANIM_WALK, true)
+		frames.set_animation_speed(MINI_BOSS_ANIM_WALK, 6.6)
+		for i in range(frames.get_frame_count(MINI_BOSS_ANIM_ATTACK)):
+			frames.add_frame(MINI_BOSS_ANIM_WALK, frames.get_frame_texture(MINI_BOSS_ANIM_ATTACK, i))
+	if not frames.has_animation(MINI_BOSS_ANIM_ATTACK) and frames.has_animation(MINI_BOSS_ANIM_WALK):
+		frames.add_animation(MINI_BOSS_ANIM_ATTACK)
+		frames.set_animation_loop(MINI_BOSS_ANIM_ATTACK, false)
+		frames.set_animation_speed(MINI_BOSS_ANIM_ATTACK, 8.8)
+		for i in range(frames.get_frame_count(MINI_BOSS_ANIM_WALK)):
+			frames.add_frame(MINI_BOSS_ANIM_ATTACK, frames.get_frame_texture(MINI_BOSS_ANIM_WALK, i))
+
+	mini_boss_sprite = AnimatedSprite2D.new()
+	mini_boss_sprite.name = "MiniBossSprite"
+	mini_boss_sprite.sprite_frames = frames
+	mini_boss_sprite.animation = MINI_BOSS_ANIM_WALK
+	mini_boss_sprite.centered = true
+	mini_boss_sprite.z_index = 3
+	mini_boss_sprite.scale = Vector2(1.9, 1.9) * ENEMY_SIZE_MULT
+	add_child(mini_boss_sprite)
+	mini_boss_sprite.play(MINI_BOSS_ANIM_WALK)
+
+func _hide_mini_boss_sprite() -> void:
+	if mini_boss_sprite != null:
+		mini_boss_sprite.visible = false
+
 func _ensure_final_boss_sprite() -> void:
 	if final_boss_sprite != null:
 		final_boss_sprite.visible = true
+		if not final_boss_sprite.is_playing():
+			final_boss_sprite.play(FINAL_BOSS_ANIM_FLY)
 		return
 
-	var texture: Texture2D = load(FINAL_BOSS_SPRITE_PATH)
-	if texture == null:
+	var fly_texture: Texture2D = load(FINAL_BOSS_FLY_SPRITE_PATH)
+	var slam_texture: Texture2D = load(FINAL_BOSS_SLAM_SPRITE_PATH)
+	var fallback_texture: Texture2D = load(FINAL_BOSS_FALLBACK_SPRITE_PATH)
+	if fly_texture == null and fallback_texture != null:
+		fly_texture = fallback_texture
+	if slam_texture == null and fallback_texture != null:
+		slam_texture = fallback_texture
+	if fly_texture == null and slam_texture == null:
 		return
 
-	final_boss_sprite = Sprite2D.new()
+	var frames: SpriteFrames = SpriteFrames.new()
+	if fly_texture != null:
+		var fly_frames: int = _sheet_frame_count(fly_texture, FINAL_BOSS_FLY_FRAME_COUNT)
+		_append_sheet_animation(frames, fly_texture, FINAL_BOSS_ANIM_FLY, fly_frames, 7.2, true)
+	if slam_texture != null:
+		var slam_frames: int = _sheet_frame_count(slam_texture, FINAL_BOSS_SLAM_FRAME_COUNT)
+		_append_sheet_animation(frames, slam_texture, FINAL_BOSS_ANIM_SLAM, slam_frames, 8.8, false)
+	if not frames.has_animation(FINAL_BOSS_ANIM_FLY) and frames.has_animation(FINAL_BOSS_ANIM_SLAM):
+		frames.add_animation(FINAL_BOSS_ANIM_FLY)
+		frames.set_animation_loop(FINAL_BOSS_ANIM_FLY, true)
+		frames.set_animation_speed(FINAL_BOSS_ANIM_FLY, 7.2)
+		for i in range(frames.get_frame_count(FINAL_BOSS_ANIM_SLAM)):
+			frames.add_frame(FINAL_BOSS_ANIM_FLY, frames.get_frame_texture(FINAL_BOSS_ANIM_SLAM, i))
+	if not frames.has_animation(FINAL_BOSS_ANIM_SLAM) and frames.has_animation(FINAL_BOSS_ANIM_FLY):
+		frames.add_animation(FINAL_BOSS_ANIM_SLAM)
+		frames.set_animation_loop(FINAL_BOSS_ANIM_SLAM, false)
+		frames.set_animation_speed(FINAL_BOSS_ANIM_SLAM, 8.8)
+		for i in range(frames.get_frame_count(FINAL_BOSS_ANIM_FLY)):
+			frames.add_frame(FINAL_BOSS_ANIM_SLAM, frames.get_frame_texture(FINAL_BOSS_ANIM_FLY, i))
+
+	final_boss_sprite = AnimatedSprite2D.new()
 	final_boss_sprite.name = "FinalBossSprite"
-	final_boss_sprite.texture = texture
+	final_boss_sprite.sprite_frames = frames
+	final_boss_sprite.animation = FINAL_BOSS_ANIM_FLY
 	final_boss_sprite.centered = true
 	final_boss_sprite.z_index = 3
-	final_boss_sprite.scale = Vector2(0.125, 0.125)
+	final_boss_sprite.scale = FINAL_BOSS_VISUAL_SCALE * ENEMY_SIZE_MULT
 	add_child(final_boss_sprite)
 	final_boss_sprite.visible = true
+	final_boss_sprite.play(FINAL_BOSS_ANIM_FLY)
 
 func _hide_final_boss_sprite() -> void:
 	if final_boss_sprite != null:
@@ -729,6 +1237,9 @@ func _spawn_final_boss_eye_burst(target: Hero, projectile_spawns: Array[Dictiona
 func set_damage_source(source_position: Vector2) -> void:
 	pending_damage_source = source_position
 
+func set_damage_direction(hit_direction: Vector2) -> void:
+	pending_damage_direction = hit_direction
+
 func take_damage(amount: float) -> void:
 	var incoming: float = amount
 	if kind == EnemyKind.ELITE and elite_window_active:
@@ -739,22 +1250,42 @@ func take_damage(amount: float) -> void:
 	hit_flash_timer = ENEMY_HIT_FLASH_DURATION
 	hit_flash_strength = clampf(incoming / maxf(max_health * 0.16, 0.01), 0.0, 1.2)
 	var source_position: Vector2 = pending_damage_source
+	var source_direction: Vector2 = pending_damage_direction
 	pending_damage_source = Vector2.ZERO
-	if source_position != Vector2.ZERO and not _is_boss_type():
+	pending_damage_direction = Vector2.ZERO
+	if source_position != Vector2.ZERO:
 		var away: Vector2 = global_position - source_position
+		var knock_dir: Vector2 = Vector2.ZERO
 		if away.length_squared() > 0.0001:
-			var knockback_strength: float = 40.0
+			knock_dir = away.normalized()
+		elif source_direction.length_squared() > 0.0001:
+			knock_dir = source_direction.normalized()
+		if knock_dir.length_squared() > 0.0001:
+			var knockback_strength: float = 82.0
 			match kind:
 				EnemyKind.SWARM:
-					knockback_strength = 46.0
+					knockback_strength = 98.0
+				EnemyKind.FLYER:
+					knockback_strength = 92.0
 				EnemyKind.RANGED:
-					knockback_strength = 38.0
+					knockback_strength = 88.0
+				EnemyKind.THROWER:
+					knockback_strength = 84.0
 				EnemyKind.ELITE:
-					knockback_strength = 24.0
-			knockback_velocity += away.normalized() * knockback_strength
+					knockback_strength = 58.0
+				EnemyKind.BOSS:
+					knockback_strength = 30.0
+				EnemyKind.FINAL_BOSS:
+					knockback_strength = 21.0
+			knockback_velocity += knock_dir * knockback_strength
+			global_position += knock_dir * knockback_strength * 0.036
 	var impact_intensity: float = 0.44
 	if kind == EnemyKind.ELITE:
 		impact_intensity = 0.62
+	elif kind == EnemyKind.THROWER:
+		impact_intensity = 0.52
+	elif kind == EnemyKind.FLYER:
+		impact_intensity = 0.5
 	elif _is_boss_type():
 		impact_intensity = 0.8
 	emit_signal("impact", global_position, impact_intensity)
@@ -787,7 +1318,15 @@ func _draw() -> void:
 	var draw_sprite_body: bool = true
 	if kind == EnemyKind.SWARM and swarm_sprite != null and swarm_sprite.visible:
 		draw_sprite_body = false
+	if kind == EnemyKind.FLYER and flyer_sprite != null and flyer_sprite.visible:
+		draw_sprite_body = false
+	if kind == EnemyKind.ELITE and elite_sprite != null and elite_sprite.visible:
+		draw_sprite_body = false
 	if kind == EnemyKind.RANGED and ranged_sprite != null and ranged_sprite.visible:
+		draw_sprite_body = false
+	if kind == EnemyKind.THROWER and thrower_sprite != null and thrower_sprite.visible:
+		draw_sprite_body = false
+	if kind == EnemyKind.BOSS and mini_boss_sprite != null and mini_boss_sprite.visible:
 		draw_sprite_body = false
 	if kind == EnemyKind.FINAL_BOSS and final_boss_sprite != null and final_boss_sprite.visible:
 		draw_sprite_body = false

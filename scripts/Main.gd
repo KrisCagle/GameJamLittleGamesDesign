@@ -13,6 +13,8 @@ const ENEMY_RANGED := 1
 const ENEMY_ELITE := 2
 const ENEMY_BOSS := 3
 const ENEMY_FINAL_BOSS := 4
+const ENEMY_FLYER := 5
+const ENEMY_THROWER := 6
 
 const PROJECTILE_TEAM_HERO := 0
 
@@ -55,22 +57,46 @@ const START_CARD_TANK_CUSTOM_PATH := "res://assets/ui/select_cards/tank_selectsc
 const START_CARD_RANGER_CUSTOM_PATH := "res://assets/ui/select_cards/ranger_selectscreen.png"
 const UPGRADE_CARD_RANGER_REMEDY_PATH := "res://assets/ui/upgrade_cards/ranger_remedy.png"
 const UPGRADE_CARD_HALO_CONDUCTION_PATH := "res://assets/ui/upgrade_cards/halo_conduction.png"
+const UPGRADE_CARD_GOLDEN_SURGE_PATH := "res://assets/ui/upgrade_cards/golden_surge.png"
+const UPGRADE_CARD_ROGUE_PRECISION_PATH := "res://assets/ui/upgrade_cards/rogue_precision.png"
+const UPGRADE_CARD_TANK_MARCH_PATH := "res://assets/ui/upgrade_cards/tank_march.png"
+const UPGRADE_CARD_HEAVY_ATTACK_PLUS_PATH := "res://assets/ui/upgrade_cards/heavy_attack_plus.png"
+const UPGRADE_CARD_TRIPLE_ARROWS_PLUS_PATH := "res://assets/ui/upgrade_cards/triple_arrows_plus.png"
+const UPGRADE_CARD_TRIPLE_ARROWS_PATH := "res://assets/ui/upgrade_cards/triple_arrows.png"
+const UPGRADE_CARD_SPECTRAL_HALO_PATH := "res://assets/ui/upgrade_cards/spectral_halo.png"
+const UPGRADE_CARD_PLUS_1_SPECTRAL_HALO_PATH := "res://assets/ui/upgrade_cards/plus_1_spectral_halo.png"
+const UPGRADE_CARD_HEAVY_ATTACK_PATH := "res://assets/ui/upgrade_cards/heavy_attack.png"
+const UPGRADE_CARD_TANK_BASTION_PATH := "res://assets/ui/upgrade_cards/tank_bastion.png"
+const UPGRADE_CARD_SHADOW_ZIP_PATH := "res://assets/ui/upgrade_cards/shadow_zip.png"
+const UPGRADE_CARD_SHADOW_ZIP_PLUS_PATH := "res://assets/ui/upgrade_cards/shadow_zip_plus.png"
+const UPGRADE_CARD_HALO_RESERVOIR_PATH := "res://assets/ui/upgrade_cards/halo_reservoir.png"
+const UPGRADE_CARD_ROGUE_OVERDRIVE_PATH := "res://assets/ui/upgrade_cards/rogue_overdrive.png"
+const UPGRADE_CARD_ARCHER_FOCUS_PATH := "res://assets/ui/upgrade_cards/archer_focus.png"
+const UPGRADE_CARD_TEAM_TRAINING_PATH := "res://assets/ui/upgrade_cards/team_training.png"
+const START_SCREEN_TITLE_LOGO_PATH := "res://assets/ui/title_logo.png"
 const START_MENU_TITLE_FONT_PATH := "res://assets/fonts/Starstruck.ttf"
 const UI_HUD_FONT_PATH := "res://assets/fonts/DEATHCROW.ttf"
 const UI_HUD_FONT_ALT_PATH := "res://assets/fonts/Mokgech-Regular.otf"
 const UI_TEXT_COLOR := Color(0.9, 0.24, 0.28, 1.0)
 const UI_OUTLINE_COLOR := Color(0.07, 0.0, 0.01, 0.96)
 const UI_SHADOW_COLOR := Color(0.0, 0.0, 0.0, 0.9)
-const FLOOR_TEXTURE_PATH := "res://assets/floor/floor_tileset12.png"
-const FLOOR_TEXTURE_CENTER_COVERAGE := 0.9
-const FLOOR_TEXTURE_WEB_COVERAGE_MULT := 0.52
-const FLOOR_TEXTURE_TILE_WORLD_SIZE := 240.0
-const FLOOR_TEXTURE_REPEAT_SRC_FRACTION := 0.25
-const FLOOR_TEXTURE_REPEAT_SRC_INSET := 0.0
-const FLOOR_TEXTURE_CENTER_WORLD_SIZE := 960.0
-const FLOOR_TEXTURE_CENTER_ALPHA := 0.9
+const FLOOR_MAIN_TEXTURE_PATH := "res://assets/floor/floor_main_tile.png"
+const FLOOR_MIDDLE_TEXTURE_PATH := "res://assets/floor/floor_middle_tile.png"
+const FLOOR_TEXTURE_TILE_WORLD_SIZE := 320.0
+const FLOOR_TEXTURE_MAIN_ALPHA := 0.96
+const FLOOR_TEXTURE_CENTER_ALPHA := 0.98
 const FLOOR_TILE_SIZE := 104.0
 const FLOOR_PATTERN_PAD := 220.0
+const WALL_TOP_WINDOWS_TEXTURE_PATH := "res://assets/floor/walls_top_windows.png"
+const WALL_LEFT_TEXTURE_PATH := "res://assets/floor/walls_left.png"
+const WALL_RIGHT_TEXTURE_PATH := "res://assets/floor/walls_right.png"
+const WALL_BOTTOM_TEXTURE_PATH := "res://assets/floor/walls_down.png"
+const WINDOW_LIGHT_TEXTURE_PATH := "res://assets/floor/window_light.png"
+const FLOOR_LIGHT_TEXTURE_PATH := "res://assets/floor/floor_light.png"
+const WALL_TOP_BLOCK := 236.0
+const WALL_SIDE_BLOCK := 24.0
+const WALL_BOTTOM_BLOCK := 14.0
+const PLAYFIELD_INNER_PAD := 8.0
 const WALL_FRAME_THICKNESS := 34.0
 const VIGNETTE_RINGS := 4
 const HERO_CONTRAST_BASE_RADIUS := 34.0
@@ -83,24 +109,50 @@ const WEB_LOW_SPEC_ENABLED := true
 const WAVE_BASE_ENEMIES := 32
 const WAVE_LINEAR_ENEMIES := 8
 const WAVE_SCALING_ENEMIES := 2.4
+const WAVE_GRADUAL_EXTRA_START := 3
+const WAVE_GRADUAL_EXTRA_PER_WAVE := 2
+const WAVE_GRADUAL_EXTRA_CAP := 32
 const WAVE_BOSS_SUPPORT_BASE := 18
 const WAVE_BOSS_SUPPORT_PER_WAVE := 4
 const WAVE_SPAWN_INTERVAL_START := 0.43
 const WAVE_SPAWN_INTERVAL_FLOOR := 0.16
 const WAVE_SPAWN_INTERVAL_DECAY := 0.014
+const WAVE_BURST_WAVE_START := 5
+const WAVE_BURST_MIN := 2
+const WAVE_BURST_MAX := 4
+const WAVE_BURST_WAVE9_BONUS := 1
+const WAVE_MINI_SURGE_WAVE_START := 6
+const WAVE_MINI_SURGE_DURATION_BASE := 3.2
+const WAVE_MINI_SURGE_DURATION_MAX := 5.2
+const WAVE_MINI_SURGE_DURATION_WAVE_SCALE := 0.06
+const WAVE_MINI_SURGE_COOLDOWN_BASE := 10.6
+const WAVE_MINI_SURGE_COOLDOWN_MIN := 6.2
+const WAVE_MINI_SURGE_COOLDOWN_WAVE_SCALE := 0.24
+const WAVE_MINI_SURGE_INTERVAL_MULT := 0.56
+const WAVE_MINI_SURGE_EXTRA_BATCH := 2
+const WAVE_MINI_SURGE_RECOVERY_DURATION := 2.2
+const WAVE_MINI_SURGE_HERO_ATK_SPEED_BONUS := 0.2
+const WAVE_MINI_SURGE_HERO_DAMAGE_BONUS := 0.15
 const CAMERA_SHAKE_DURATION := 0.16
 const CAMERA_SHAKE_DECAY := 26.0
 const CAMERA_SHAKE_MAX := 8.0
 const TEAM_POWER_TIGHT_RADIUS := 102.0
 const TEAM_POWER_SPREAD_RADIUS := 268.0
 const TEAM_POWER_SMOOTH := 5.6
-const TEAM_POWER_REGEN_THRESHOLD := 0.56
-const TEAM_POWER_REGEN_PER_SEC := 1.05
 const TEAM_LINK_MAX_DISTANCE := 220.0
 const TEAM_LINK_MAX_ALPHA := 0.26
 const TEAM_CIRCLE_BASE_RADIUS := 116.0
 const TEAM_CIRCLE_MAX_RADIUS := 178.0
 const KILL_FLASH_DURATION := 0.24
+const HEALTH_DROP_LIFETIME := 11.0
+const HEALTH_DROP_DRAG := 190.0
+const HEALTH_DROP_PULL_SPEED := 320.0
+const HEALTH_DROP_ATTRACT_RADIUS := 124.0
+const HEALTH_DROP_PICKUP_PAD := 6.0
+const HEALTH_DROP_SHEET_PATH := "res://assets/pickups/heal_sheet7.png"
+const HEALTH_DROP_SHEET_FRAME_COUNT := 7
+const HEALTH_DROP_SHEET_FPS := 9.2
+const HEALTH_DROP_SHEET_BASE_SCALE := 2.0
 const PERFECT_POSITION_RING_RADIUS := 92.0
 const PERFECT_POSITION_FEEDBACK_DURATION := 0.92
 const PERFECT_POSITION_KILL_FLASH_MULT := 1.34
@@ -108,9 +160,18 @@ const PERFECT_POSITION_HIT_FEEDBACK_MULT := 1.3
 const PERFECT_POSITION_HIT_SHAKE_BONUS := 0.22
 const PERFECT_POSITION_IMPACT_FLASH_INTERVAL := 0.05
 const PERFECT_POSITION_IMPACT_FLASH_INTENSITY := 1.08
-const PERFECT_POSITION_SOUND_COOLDOWN := 0.7
+const PERFECT_POSITION_SOUND_COOLDOWN := 2.8
+const PERFECT_POSITION_ENTER_STABLE_TIME := 0.22
+const PERFECT_POSITION_EXIT_GRACE_TIME := 0.14
+const PERFECT_POSITION_SOUND_REARM_TIME := 0.8
+const PERFECT_POSITION_SFX_PATH := "res://assets/audio/perfect_position_lock_in.wav"
+const PERFECT_POSITION_SFX_VOLUME_DB := -19.0
+const PERFECT_POSITION_BREAK_SFX_PATH := "res://assets/audio/perfect_position_break.wav"
+const PERFECT_POSITION_BREAK_SFX_VOLUME_DB := -19.5
+const PERFECT_POSITION_BREAK_SOUND_COOLDOWN := 2.8
+const PERFECT_POSITION_BREAK_MIN_ACTIVE_TIME := 0.65
 const SPECTRAL_HALO_SPEED := 356.0
-const SPECTRAL_HALO_RADIUS := 14.0
+const SPECTRAL_HALO_RADIUS := 18.0
 const SPECTRAL_HALO_CONTACT_DAMAGE := 21.0
 const SPECTRAL_HALO_HIT_COOLDOWN := 0.14
 const SPECTRAL_HALO_HEAL_RADIUS_BONUS := 16.0
@@ -122,13 +183,33 @@ const PERFECT_POSITION_SOUND_ENABLED := true
 const SFX_MIX_RATE := 32000.0
 const SFX_BUFFER_LENGTH := 0.16
 const SFX_MIN_INTERVAL := 0.035
-const BGM_PATH := "res://assets/audio/los_tres.mp3"
-const BGM_MENU_VOLUME_DB := -23.0
+const BGM_MENU_PATH := "res://assets/audio/menu_triada_poderoza.mp3"
+const BGM_GAME_PATH := "res://assets/audio/triada_poderoza.mp3"
+const BGM_GAME_LOW_HEALTH_PATH := "res://assets/audio/triada_poderoza_low_health.mp3"
+const BGM_MENU_VOLUME_DB := -26.0
 const BGM_GAME_VOLUME_DB := -16.0
-const UI_CLICK_SFX_PATH := "res://assets/audio/single-beep_C_major.wav"
-const UI_START_CONFIRM_SFX_PATH := "res://assets/audio/end-level-beep_C_major.wav"
-const UI_CLICK_SFX_VOLUME_DB := -18.0
-const UI_START_CONFIRM_SFX_VOLUME_DB := -18.0
+const BGM_LOOP_CROSSFADE_TIME := 0.72
+const BGM_SILENT_DB := -46.0
+const BGM_VOLUME_SMOOTH := 5.5
+const BGM_LOW_HEALTH_ENTER_RATIO := 0.34
+const BGM_LOW_HEALTH_EXIT_RATIO := 0.48
+const BGM_LOW_LAYER_BLEND_SPEED := 4.2
+const BGM_LOW_LAYER_SYNC_TOLERANCE := 0.22
+const BGM_GAME_LOW_LAYER_VOLUME_DB := -15.0
+const BGM_GAME_MAIN_DUCK_DB := 7.0
+const BGM_MODE_MENU := 0
+const BGM_MODE_GAME := 1
+const BGM_MODE_GAME_LOW_HEALTH := 2
+const UI_CLICK_SFX_PATH := "res://assets/audio/menu_click_1.wav"
+const UI_CHARACTER_SELECT_SFX_PATH := "res://assets/audio/character_select_1.wav"
+const UI_START_GAME_SFX_PATH := "res://assets/audio/start_game_3.wav"
+const UI_FINAL_BOSS_APPEAR_SFX_PATH := "res://assets/audio/final_boss_appear.wav"
+const UI_CLICK_SFX_VOLUME_DB := -12.0
+const UI_CHARACTER_SELECT_SFX_VOLUME_DB := -12.5
+const UI_START_GAME_SFX_VOLUME_DB := -12.5
+const UI_FINAL_BOSS_APPEAR_SFX_VOLUME_DB := -13.5
+const UI_CLICK_SFX_MAX_POLYPHONY := 6
+const UI_SELECT_SFX_MAX_POLYPHONY := 4
 const START_SCREEN_BUTTON_SIZE := Vector2(300.0, 72.0)
 const GAME_OVER_BUTTON_SIZE := Vector2(360.0, 72.0)
 const GAME_OVER_PANEL_SIZE := Vector2(560.0, 320.0)
@@ -142,6 +223,9 @@ const BOSS_VICTORY_PANEL_SIZE := Vector2(760.0, 420.0)
 const BOSS_VICTORY_BUTTON_SIZE := Vector2(300.0, 64.0)
 const BOSS_VICTORY_PANEL_MARGIN_X := 72.0
 const BOSS_VICTORY_PANEL_MARGIN_Y := 56.0
+const OPTIONS_PANEL_SIZE := Vector2(560.0, 330.0)
+const OPTIONS_BUTTON_SIZE := Vector2(300.0, 64.0)
+const OPTIONS_CLOSE_BUTTON_SIZE := Vector2(220.0, 58.0)
 
 @onready var heroes_root: Node2D = $Heroes
 @onready var enemies_root: Node2D = $Enemies
@@ -185,6 +269,11 @@ var spawn_timer: float = 0.0
 var spawning: bool = false
 var boss_spawn_pending: bool = false
 var boss_spawn_kind: int = ENEMY_BOSS
+var spawn_burst_remaining: int = 0
+var wave_surge_active: bool = false
+var wave_surge_timer: float = 0.0
+var wave_surge_cooldown_timer: float = 0.0
+var wave_surge_recovery_timer: float = 0.0
 var waiting_for_next_wave: bool = false
 var intermission_timer: float = 0.0
 
@@ -193,6 +282,7 @@ var start_screen_active: bool = true
 var start_selection_active: bool = false
 var tutorial_screen_active: bool = false
 var pause_menu_active: bool = false
+var options_menu_active: bool = false
 var boss_victory_prompt_active: bool = false
 var upgrade_phase_active: bool = false
 var upgrade_choices: Array[int] = []
@@ -211,12 +301,37 @@ var start_card_tank_custom: Texture2D = null
 var start_card_ranger_custom: Texture2D = null
 var upgrade_card_ranger_remedy: Texture2D = null
 var upgrade_card_halo_conduction: Texture2D = null
+var upgrade_card_golden_surge: Texture2D = null
+var upgrade_card_rogue_precision: Texture2D = null
+var upgrade_card_tank_march: Texture2D = null
+var upgrade_card_heavy_attack_plus: Texture2D = null
+var upgrade_card_triple_arrows_plus: Texture2D = null
+var upgrade_card_triple_arrows: Texture2D = null
+var upgrade_card_spectral_halo: Texture2D = null
+var upgrade_card_plus_1_spectral_halo: Texture2D = null
+var upgrade_card_heavy_attack: Texture2D = null
+var upgrade_card_tank_bastion: Texture2D = null
+var upgrade_card_shadow_zip: Texture2D = null
+var upgrade_card_shadow_zip_plus: Texture2D = null
+var upgrade_card_halo_reservoir: Texture2D = null
+var upgrade_card_rogue_overdrive: Texture2D = null
+var upgrade_card_archer_focus: Texture2D = null
+var upgrade_card_team_training: Texture2D = null
+var start_screen_title_logo: Texture2D = null
 var start_menu_title_font: Font = null
 var hud_font: Font = null
 var lighting_root: Node2D = null
 var light_texture_soft: Texture2D = null
 var light_texture_wide: Texture2D = null
-var floor_texture: Texture2D = null
+var floor_main_texture: Texture2D = null
+var floor_middle_texture: Texture2D = null
+var wall_top_windows_texture: Texture2D = null
+var wall_left_texture: Texture2D = null
+var wall_right_texture: Texture2D = null
+var wall_bottom_texture: Texture2D = null
+var window_light_texture: Texture2D = null
+var floor_light_texture: Texture2D = null
+var stained_glass_window_texture: Texture2D = null
 var top_glow_lights: Array[PointLight2D] = []
 var top_beam_lights: Array[PointLight2D] = []
 var hero_lights: Array[PointLight2D] = []
@@ -227,6 +342,8 @@ var center_ceiling_glow: PointLight2D = null
 var center_ceiling_beam: PointLight2D = null
 var center_ceiling_core: PointLight2D = null
 var center_ceiling_haze: PointLight2D = null
+var health_drop_sheet: Texture2D = null
+var health_drop_frame_size: Vector2 = Vector2.ZERO
 var low_spec_mode: bool = false
 var camera_shake_timer: float = 0.0
 var camera_shake_strength: float = 0.0
@@ -235,24 +352,55 @@ var team_power: float = 0.0
 var team_power_center: Vector2 = Vector2.ZERO
 var team_power_radius: float = TEAM_CIRCLE_BASE_RADIUS
 var kill_flashes: Array[Dictionary] = []
+var health_drops: Array[Dictionary] = []
 var perfect_position_active: bool = false
 var perfect_position_feedback_timer: float = 0.0
 var perfect_position_impact_flash_timer: float = 0.0
 var perfect_position_sound_cooldown_timer: float = 0.0
+var perfect_position_break_sound_cooldown_timer: float = 0.0
+var perfect_position_inside_timer: float = 0.0
+var perfect_position_outside_timer: float = 0.0
+var perfect_position_active_hold_timer: float = 0.0
+var perfect_position_sound_armed: bool = true
+var perfect_position_break_sound_armed: bool = false
 var spectral_halo_unlocked: bool = false
 var spectral_halo_count: int = 0
 var spectral_halo_positions: Array[Vector2] = []
 var spectral_halo_velocities: Array[Vector2] = []
 var spectral_halo_hit_timers: Array[float] = []
 var spectral_halo_heal_timers: Array[float] = []
-var bgm_player: AudioStreamPlayer = null
+var bgm_players: Array[AudioStreamPlayer] = []
+var bgm_menu_stream: AudioStream = null
+var bgm_game_stream: AudioStream = null
+var bgm_game_low_health_stream: AudioStream = null
+var bgm_target_volume_db: float = BGM_MENU_VOLUME_DB
+var bgm_active_player_index: int = 0
+var bgm_active_mode: int = BGM_MODE_MENU
+var bgm_low_health_active: bool = false
+var bgm_low_layer_player: AudioStreamPlayer = null
+var bgm_low_layer_mix: float = 0.0
+var bgm_crossfade_active: bool = false
+var bgm_crossfade_timer: float = 0.0
+var bgm_crossfade_from_index: int = 0
+var bgm_crossfade_to_index: int = 1
 var sfx_player: AudioStreamPlayer = null
 var sfx_playback: AudioStreamGeneratorPlayback = null
 var sfx_cooldown_timer: float = 0.0
 var ui_click_player: AudioStreamPlayer = null
-var ui_start_confirm_player: AudioStreamPlayer = null
+var ui_character_select_player: AudioStreamPlayer = null
+var ui_start_game_player: AudioStreamPlayer = null
+var ui_final_boss_appear_player: AudioStreamPlayer = null
 var ui_click_stream: AudioStream = null
-var ui_start_confirm_stream: AudioStream = null
+var ui_character_select_stream: AudioStream = null
+var ui_start_game_stream: AudioStream = null
+var ui_final_boss_appear_stream: AudioStream = null
+var perfect_position_stream: AudioStream = null
+var perfect_position_player: AudioStreamPlayer = null
+var perfect_position_break_stream: AudioStream = null
+var perfect_position_break_player: AudioStreamPlayer = null
+var music_volume_percent: float = 100.0
+var sfx_volume_percent: float = 100.0
+var options_drag_slider: int = -1
 
 func _ready() -> void:
 	randomize()
@@ -279,16 +427,32 @@ func _ready() -> void:
 	_spawn_heroes()
 	_load_start_card_textures()
 	_load_upgrade_card_textures()
+	start_screen_title_logo = _prepare_start_screen_title_logo(load(START_SCREEN_TITLE_LOGO_PATH) as Texture2D)
 	start_menu_title_font = load(START_MENU_TITLE_FONT_PATH) as Font
 	hud_font = load(UI_HUD_FONT_PATH) as Font
 	if hud_font == null:
 		hud_font = load(UI_HUD_FONT_ALT_PATH) as Font
 	_configure_hud_style()
-	floor_texture = load(FLOOR_TEXTURE_PATH) as Texture2D
+	floor_main_texture = load(FLOOR_MAIN_TEXTURE_PATH) as Texture2D
+	floor_middle_texture = load(FLOOR_MIDDLE_TEXTURE_PATH) as Texture2D
+	wall_top_windows_texture = load(WALL_TOP_WINDOWS_TEXTURE_PATH) as Texture2D
+	wall_left_texture = load(WALL_LEFT_TEXTURE_PATH) as Texture2D
+	wall_right_texture = load(WALL_RIGHT_TEXTURE_PATH) as Texture2D
+	wall_bottom_texture = load(WALL_BOTTOM_TEXTURE_PATH) as Texture2D
+	window_light_texture = load(WINDOW_LIGHT_TEXTURE_PATH) as Texture2D
+	floor_light_texture = load(FLOOR_LIGHT_TEXTURE_PATH) as Texture2D
+	stained_glass_window_texture = _prepare_vertical_flip_texture(floor_light_texture)
+	health_drop_sheet = load(HEALTH_DROP_SHEET_PATH) as Texture2D
+	if health_drop_sheet != null:
+		var frame_count: int = max(1, HEALTH_DROP_SHEET_FRAME_COUNT)
+		var frame_w: float = floor(float(health_drop_sheet.get_width()) / float(frame_count))
+		if frame_w > 0.0:
+			health_drop_frame_size = Vector2(frame_w, float(health_drop_sheet.get_height()))
 	_setup_bgm()
 	_start_bgm_menu()
 	_setup_audio_sfx()
 	_setup_ui_sfx()
+	_apply_audio_mix_levels()
 	low_spec_mode = WEB_LOW_SPEC_ENABLED and OS.has_feature("web")
 	_setup_lighting_nodes()
 	heroes_root.visible = false
@@ -296,6 +460,7 @@ func _ready() -> void:
 	start_selection_active = false
 	tutorial_screen_active = false
 	pause_menu_active = false
+	options_menu_active = false
 	halo_index = -1
 	halo_equipped = false
 	halo_charge = HALO_CHARGE_MAX
@@ -310,10 +475,17 @@ func _ready() -> void:
 	spectral_halo_heal_timers.clear()
 	for _i in range(heroes.size()):
 		spectral_halo_heal_timers.append(0.0)
+	health_drops.clear()
 	perfect_position_active = false
 	perfect_position_feedback_timer = 0.0
 	perfect_position_impact_flash_timer = 0.0
 	perfect_position_sound_cooldown_timer = 0.0
+	perfect_position_break_sound_cooldown_timer = 0.0
+	perfect_position_inside_timer = 0.0
+	perfect_position_outside_timer = 0.0
+	perfect_position_active_hold_timer = 0.0
+	perfect_position_sound_armed = true
+	perfect_position_break_sound_armed = false
 	_sync_halo_state()
 	world_camera.position = arena_rect.get_center()
 	world_camera.zoom = CAMERA_ZOOM_MENU
@@ -352,6 +524,9 @@ func _process(delta: float) -> void:
 	sfx_cooldown_timer = maxf(0.0, sfx_cooldown_timer - delta)
 	perfect_position_impact_flash_timer = maxf(0.0, perfect_position_impact_flash_timer - delta)
 	perfect_position_sound_cooldown_timer = maxf(0.0, perfect_position_sound_cooldown_timer - delta)
+	perfect_position_break_sound_cooldown_timer = maxf(0.0, perfect_position_break_sound_cooldown_timer - delta)
+	_update_gameplay_bgm_state()
+	_update_bgm_loop(delta)
 
 	if start_screen_active:
 		_update_kill_flashes(delta)
@@ -414,19 +589,25 @@ func _process(delta: float) -> void:
 	projectile_spawns.clear()
 	summon_spawns.clear()
 	var player_move_input: Vector2 = _get_player_move_input()
+	var play_rect: Rect2 = _playfield_rect()
+	var surge_intensity: float = _wave_surge_intensity()
+	var surge_attack_speed_bonus: float = WAVE_MINI_SURGE_HERO_ATK_SPEED_BONUS * surge_intensity
+	var surge_damage_bonus: float = WAVE_MINI_SURGE_HERO_DAMAGE_BONUS * surge_intensity
 	for hero: Hero in heroes:
+		hero.set_wave_surge_boost(surge_attack_speed_bonus, surge_damage_bonus)
 		hero.process_visual_tick(delta)
-		hero.process_tick(delta, enemies, heroes, arena_rect, projectile_spawns, player_move_input)
+		hero.process_tick(delta, enemies, heroes, play_rect, projectile_spawns, player_move_input)
 
 	_apply_halo_synergies(delta)
 	for enemy: Enemy in enemies:
-		enemy.process_tick(delta, heroes, arena_rect, projectile_spawns, summon_spawns)
+		enemy.process_tick(delta, heroes, play_rect, projectile_spawns, summon_spawns)
 	_update_spectral_halo(delta)
 
 	_spawn_summoned_enemies_from_queue()
 	_spawn_projectiles_from_queue()
 	_update_projectiles(delta)
 	_cleanup_dead_enemies()
+	_update_health_drops(delta)
 	_validate_halo_target()
 	_check_for_game_over()
 	_progress_wave_timing(delta)
@@ -440,6 +621,11 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
+		if options_menu_active:
+			if event.keycode == KEY_ESCAPE:
+				_play_ui_click_sfx()
+				_close_options_menu()
+			return
 		if event.keycode == KEY_ESCAPE:
 			if pause_menu_active:
 				_play_ui_click_sfx()
@@ -455,7 +641,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 
 		if start_screen_active and (event.keycode == KEY_ENTER or event.keycode == KEY_SPACE):
-			_play_ui_click_sfx()
+			_play_ui_start_game_sfx()
 			_open_tutorial_screen()
 			return
 
@@ -514,10 +700,17 @@ func _unhandled_input(event: InputEvent) -> void:
 					_attempt_halo_reactivate()
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		if options_menu_active:
+			_handle_options_click(event.position)
+			return
 		if start_screen_active:
 			if _start_screen_button_rect().has_point(event.position):
-				_play_ui_click_sfx()
+				_play_ui_start_game_sfx()
 				_open_tutorial_screen()
+				return
+			if _start_screen_options_button_rect().has_point(event.position):
+				_play_ui_click_sfx()
+				_open_options_menu()
 				return
 			return
 		if tutorial_screen_active:
@@ -534,6 +727,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _pause_home_button_rect().has_point(event.position):
 				_play_ui_click_sfx()
 				_return_to_main_menu()
+				return
+			if _pause_options_button_rect().has_point(event.position):
+				_play_ui_click_sfx()
+				_open_options_menu()
 				return
 			return
 		if boss_victory_prompt_active:
@@ -566,6 +763,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				_attempt_halo_reactivate()
 			return
 		_set_halo_from_point(world_point)
+
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		options_drag_slider = -1
+		return
+
+	if event is InputEventMouseMotion and options_menu_active and options_drag_slider >= 0 and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		if options_drag_slider == 0:
+			_set_music_volume_percent(_slider_value_from_screen_point(event.position, _options_music_slider_rect_screen()))
+		elif options_drag_slider == 1:
+			_set_sfx_volume_percent(_slider_value_from_screen_point(event.position, _options_sfx_slider_rect_screen()))
+		return
 
 func _spawn_heroes() -> void:
 	heroes.clear()
@@ -630,6 +838,22 @@ func _load_start_card_textures() -> void:
 func _load_upgrade_card_textures() -> void:
 	upgrade_card_ranger_remedy = load(UPGRADE_CARD_RANGER_REMEDY_PATH) as Texture2D
 	upgrade_card_halo_conduction = load(UPGRADE_CARD_HALO_CONDUCTION_PATH) as Texture2D
+	upgrade_card_golden_surge = load(UPGRADE_CARD_GOLDEN_SURGE_PATH) as Texture2D
+	upgrade_card_rogue_precision = load(UPGRADE_CARD_ROGUE_PRECISION_PATH) as Texture2D
+	upgrade_card_tank_march = load(UPGRADE_CARD_TANK_MARCH_PATH) as Texture2D
+	upgrade_card_heavy_attack_plus = load(UPGRADE_CARD_HEAVY_ATTACK_PLUS_PATH) as Texture2D
+	upgrade_card_triple_arrows_plus = load(UPGRADE_CARD_TRIPLE_ARROWS_PLUS_PATH) as Texture2D
+	upgrade_card_triple_arrows = load(UPGRADE_CARD_TRIPLE_ARROWS_PATH) as Texture2D
+	upgrade_card_spectral_halo = load(UPGRADE_CARD_SPECTRAL_HALO_PATH) as Texture2D
+	upgrade_card_plus_1_spectral_halo = load(UPGRADE_CARD_PLUS_1_SPECTRAL_HALO_PATH) as Texture2D
+	upgrade_card_heavy_attack = load(UPGRADE_CARD_HEAVY_ATTACK_PATH) as Texture2D
+	upgrade_card_tank_bastion = load(UPGRADE_CARD_TANK_BASTION_PATH) as Texture2D
+	upgrade_card_shadow_zip = load(UPGRADE_CARD_SHADOW_ZIP_PATH) as Texture2D
+	upgrade_card_shadow_zip_plus = load(UPGRADE_CARD_SHADOW_ZIP_PLUS_PATH) as Texture2D
+	upgrade_card_halo_reservoir = load(UPGRADE_CARD_HALO_RESERVOIR_PATH) as Texture2D
+	upgrade_card_rogue_overdrive = load(UPGRADE_CARD_ROGUE_OVERDRIVE_PATH) as Texture2D
+	upgrade_card_archer_focus = load(UPGRADE_CARD_ARCHER_FOCUS_PATH) as Texture2D
+	upgrade_card_team_training = load(UPGRADE_CARD_TEAM_TRAINING_PATH) as Texture2D
 
 func _custom_upgrade_card_texture(upgrade_id: int) -> Texture2D:
 	match upgrade_id:
@@ -637,6 +861,38 @@ func _custom_upgrade_card_texture(upgrade_id: int) -> Texture2D:
 			return upgrade_card_ranger_remedy
 		UPGRADE_HALO_FLOW:
 			return upgrade_card_halo_conduction
+		UPGRADE_GOLDEN_SURGE:
+			return upgrade_card_golden_surge
+		UPGRADE_ROGUE_PRECISION:
+			return upgrade_card_rogue_precision
+		UPGRADE_TANK_MARCH:
+			return upgrade_card_tank_march
+		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
+			return upgrade_card_heavy_attack_plus
+		UPGRADE_RANGER_TRIPLE_ARROWS_PLUS:
+			return upgrade_card_triple_arrows_plus
+		UPGRADE_RANGER_TRIPLE_ARROWS:
+			return upgrade_card_triple_arrows
+		UPGRADE_HALO_SPECTER:
+			return upgrade_card_spectral_halo
+		UPGRADE_HALO_ECHO:
+			return upgrade_card_plus_1_spectral_halo
+		UPGRADE_TANK_HEAVY_ATTACK:
+			return upgrade_card_heavy_attack
+		UPGRADE_TANK_BASTION:
+			return upgrade_card_tank_bastion
+		UPGRADE_ROGUE_TWIN_FANGS:
+			return upgrade_card_shadow_zip
+		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
+			return upgrade_card_shadow_zip_plus
+		UPGRADE_HALO_RESERVOIR:
+			return upgrade_card_halo_reservoir
+		UPGRADE_ROGUE_OVERDRIVE:
+			return upgrade_card_rogue_overdrive
+		UPGRADE_RANGER_FOCUS:
+			return upgrade_card_archer_focus
+		UPGRADE_TEAM_TRAINING:
+			return upgrade_card_team_training
 	return null
 
 func _load_start_card_preview_frames(path: String) -> Array[Texture2D]:
@@ -665,16 +921,85 @@ func _load_start_card_preview_frames(path: String) -> Array[Texture2D]:
 		result.append(ImageTexture.create_from_image(frame_img))
 	return result
 
-func _draw_texture_fit(texture: Texture2D, rect: Rect2, modulate: Color = Color(1.0, 1.0, 1.0, 1.0)) -> void:
+func _prepare_start_screen_title_logo(texture: Texture2D) -> Texture2D:
 	if texture == null:
+		return null
+	var img: Image = texture.get_image()
+	if img == null or img.is_empty():
+		return texture
+
+	img.convert(Image.FORMAT_RGBA8)
+	var bg: Color = img.get_pixel(0, 0)
+	var bg_r: float = bg.r
+	var bg_g: float = bg.g
+	var bg_b: float = bg.b
+	var keyed_any: bool = false
+	var inner_dist: float = 0.11
+	var outer_dist: float = 0.2
+	var width: int = img.get_width()
+	var height: int = img.get_height()
+
+	for y in range(height):
+		for x in range(width):
+			var c: Color = img.get_pixel(x, y)
+			var dr: float = c.r - bg_r
+			var dg: float = c.g - bg_g
+			var db: float = c.b - bg_b
+			var dist: float = sqrt(dr * dr + dg * dg + db * db)
+			if dist <= inner_dist:
+				img.set_pixel(x, y, Color(c.r, c.g, c.b, 0.0))
+				keyed_any = true
+			elif dist <= outer_dist:
+				var t: float = (dist - inner_dist) / maxf(outer_dist - inner_dist, 0.0001)
+				var a: float = clampf(c.a * t, 0.0, 1.0)
+				if a < c.a:
+					keyed_any = true
+				img.set_pixel(x, y, Color(c.r, c.g, c.b, a))
+
+	if not keyed_any:
+		return texture
+	return ImageTexture.create_from_image(img)
+
+func _draw_texture_fit(texture: Texture2D, rect: Rect2, modulate: Color = Color(1.0, 1.0, 1.0, 1.0)) -> void:
+	var draw_rect_fit: Rect2 = _get_texture_fit_rect(texture, rect)
+	if draw_rect_fit.size.x <= 0.0 or draw_rect_fit.size.y <= 0.0:
 		return
+	draw_texture_rect(texture, draw_rect_fit, false, modulate)
+
+func _get_texture_fit_rect(texture: Texture2D, rect: Rect2) -> Rect2:
+	if texture == null:
+		return Rect2(rect.position, Vector2.ZERO)
 	var tex_size: Vector2 = texture.get_size()
 	if tex_size.x <= 0.0 or tex_size.y <= 0.0:
-		return
+		return Rect2(rect.position, Vector2.ZERO)
 	var scale: float = minf(rect.size.x / tex_size.x, rect.size.y / tex_size.y)
 	var draw_size: Vector2 = tex_size * scale
-	var draw_rect_fit: Rect2 = Rect2(rect.position + (rect.size - draw_size) * 0.5, draw_size)
-	draw_texture_rect(texture, draw_rect_fit, false, modulate)
+	return Rect2(rect.position + (rect.size - draw_size) * 0.5, draw_size)
+
+func _draw_capsule_outline(rect: Rect2, color: Color, width: float = 1.6) -> void:
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return
+	var radius: float = minf(rect.size.x * 0.5, rect.size.y * 0.5)
+	if radius <= 0.0:
+		return
+	var cx: float = rect.get_center().x
+	var top_cy: float = rect.position.y + radius
+	var bottom_cy: float = rect.end.y - radius
+	draw_arc(Vector2(cx, top_cy), radius, PI, TAU, 28, color, width)
+	draw_arc(Vector2(cx, bottom_cy), radius, 0.0, PI, 28, color, width)
+	var left_x: float = cx - radius
+	var right_x: float = cx + radius
+	draw_line(Vector2(left_x, top_cy), Vector2(left_x, bottom_cy), color, width)
+	draw_line(Vector2(right_x, top_cy), Vector2(right_x, bottom_cy), color, width)
+
+func _prepare_vertical_flip_texture(texture: Texture2D) -> Texture2D:
+	if texture == null:
+		return null
+	var img: Image = texture.get_image()
+	if img == null or img.is_empty():
+		return texture
+	img.flip_y()
+	return ImageTexture.create_from_image(img)
 
 func _create_soft_light_texture(size: int, exponent: float) -> Texture2D:
 	var tex_size: int = max(16, size)
@@ -957,10 +1282,22 @@ func _start_wave() -> void:
 	if boss_spawn_pending:
 		# Boss waves open as a clean boss-only phase; adds ramp from boss summons over time.
 		spawn_remaining = 0
+		spawn_burst_remaining = 0
+		wave_surge_active = false
+		wave_surge_timer = 0.0
+		wave_surge_cooldown_timer = 0.0
+		wave_surge_recovery_timer = 0.0
 	else:
 		var difficulty_wave: int = _difficulty_wave_value()
 		var cycle_bonus: int = endless_cycle * 8
-		spawn_remaining = WAVE_BASE_ENEMIES + cycle_wave * WAVE_LINEAR_ENEMIES + int(floor(float(difficulty_wave) * WAVE_SCALING_ENEMIES)) + cycle_bonus
+		var gradual_steps: int = max(0, cycle_wave - WAVE_GRADUAL_EXTRA_START + 1)
+		var gradual_bonus: int = mini(WAVE_GRADUAL_EXTRA_CAP + endless_cycle * 6, gradual_steps * WAVE_GRADUAL_EXTRA_PER_WAVE)
+		spawn_remaining = WAVE_BASE_ENEMIES + cycle_wave * WAVE_LINEAR_ENEMIES + int(floor(float(difficulty_wave) * WAVE_SCALING_ENEMIES)) + cycle_bonus + gradual_bonus
+		spawn_burst_remaining = _roll_spawn_burst_count(cycle_wave)
+		wave_surge_active = false
+		wave_surge_timer = 0.0
+		wave_surge_recovery_timer = 0.0
+		wave_surge_cooldown_timer = _roll_next_surge_cooldown(cycle_wave)
 	spawn_timer = 0.18
 	spawning = true
 	waiting_for_next_wave = false
@@ -974,21 +1311,122 @@ func _update_spawning(delta: float) -> void:
 	if not spawning:
 		return
 
+	_update_wave_surge(delta)
 	spawn_timer -= delta
 	var difficulty_wave: int = _difficulty_wave_value()
 	var interval: float = maxf(WAVE_SPAWN_INTERVAL_START - float(difficulty_wave) * WAVE_SPAWN_INTERVAL_DECAY, WAVE_SPAWN_INTERVAL_FLOOR)
+	if wave_surge_active:
+		interval *= WAVE_MINI_SURGE_INTERVAL_MULT
+	elif wave_surge_recovery_timer > 0.0:
+		interval *= 1.24
 	while spawn_timer <= 0.0 and (spawn_remaining > 0 or boss_spawn_pending):
 		if boss_spawn_pending:
 			_spawn_boss()
 			boss_spawn_pending = false
 			spawn_timer += interval * 1.75
 		elif spawn_remaining > 0:
-			_spawn_enemy()
-			spawn_remaining -= 1
-			spawn_timer += interval
+			var batch_count: int = _next_spawn_batch_size()
+			for _i in range(batch_count):
+				if spawn_remaining <= 0:
+					break
+				_spawn_enemy()
+				spawn_remaining -= 1
+			spawn_timer += interval * randf_range(0.86, 1.18)
 
 	if spawn_remaining <= 0 and not boss_spawn_pending:
 		spawning = false
+		wave_surge_active = false
+		wave_surge_timer = 0.0
+		wave_surge_cooldown_timer = 0.0
+		wave_surge_recovery_timer = 0.0
+
+func _roll_spawn_burst_count(cycle_wave: int) -> int:
+	if cycle_wave < WAVE_BURST_WAVE_START:
+		return 0
+	var max_bonus: int = WAVE_BURST_WAVE9_BONUS if cycle_wave >= 9 else 0
+	return randi_range(WAVE_BURST_MIN, WAVE_BURST_MAX + max_bonus)
+
+func _roll_next_surge_cooldown(cycle_wave: int) -> float:
+	if cycle_wave < WAVE_MINI_SURGE_WAVE_START:
+		return 9999.0
+	var scaled: float = WAVE_MINI_SURGE_COOLDOWN_BASE - float(cycle_wave - WAVE_MINI_SURGE_WAVE_START) * WAVE_MINI_SURGE_COOLDOWN_WAVE_SCALE
+	var base: float = maxf(WAVE_MINI_SURGE_COOLDOWN_MIN, scaled)
+	return base + randf_range(-0.9, 1.2)
+
+func _wave_has_boss_pressure() -> bool:
+	if boss_spawn_pending:
+		return true
+	for enemy: Enemy in enemies:
+		if enemy.health <= 0.0:
+			continue
+		if enemy.kind == ENEMY_BOSS or enemy.kind == ENEMY_FINAL_BOSS:
+			return true
+	return false
+
+func _update_wave_surge(delta: float) -> void:
+	if _current_cycle_wave() < WAVE_MINI_SURGE_WAVE_START:
+		wave_surge_active = false
+		wave_surge_timer = 0.0
+		wave_surge_cooldown_timer = 0.0
+		wave_surge_recovery_timer = 0.0
+		return
+
+	if _wave_has_boss_pressure():
+		wave_surge_active = false
+		wave_surge_timer = 0.0
+		wave_surge_recovery_timer = 0.0
+		return
+
+	if wave_surge_active:
+		wave_surge_timer = maxf(0.0, wave_surge_timer - delta)
+		if wave_surge_timer <= 0.0:
+			wave_surge_active = false
+			wave_surge_recovery_timer = WAVE_MINI_SURGE_RECOVERY_DURATION + randf_range(-0.3, 0.3)
+			wave_surge_cooldown_timer = _roll_next_surge_cooldown(_current_cycle_wave())
+		return
+
+	if wave_surge_recovery_timer > 0.0:
+		wave_surge_recovery_timer = maxf(0.0, wave_surge_recovery_timer - delta)
+		return
+
+	wave_surge_cooldown_timer -= delta
+	if wave_surge_cooldown_timer > 0.0 or spawn_remaining <= 0:
+		return
+
+	wave_surge_active = true
+	var cycle_wave: int = _current_cycle_wave()
+	var duration: float = minf(
+		WAVE_MINI_SURGE_DURATION_MAX,
+		WAVE_MINI_SURGE_DURATION_BASE + float(max(0, cycle_wave - WAVE_MINI_SURGE_WAVE_START)) * WAVE_MINI_SURGE_DURATION_WAVE_SCALE
+	)
+	wave_surge_timer = duration + randf_range(-0.35, 0.48)
+	spawn_burst_remaining += WAVE_MINI_SURGE_EXTRA_BATCH + (1 if cycle_wave >= 10 else 0)
+	_add_camera_shake(0.32)
+
+func _next_spawn_batch_size() -> int:
+	var cycle_wave: int = _current_cycle_wave()
+	var batch: int = 1
+	if cycle_wave >= WAVE_BURST_WAVE_START and spawn_burst_remaining > 0:
+		batch += 1
+		if cycle_wave >= 8 and randf() < 0.42:
+			batch += 1
+		spawn_burst_remaining -= 1
+		if spawn_burst_remaining <= 0:
+			spawn_burst_remaining = _roll_spawn_burst_count(cycle_wave)
+	if wave_surge_active:
+		batch += WAVE_MINI_SURGE_EXTRA_BATCH
+		if cycle_wave >= 10:
+			batch += 1
+	elif wave_surge_recovery_timer > 0.0:
+		batch = maxi(1, batch - 1)
+	return batch
+
+func _wave_surge_intensity() -> float:
+	if wave_surge_active:
+		return 1.0
+	if wave_surge_recovery_timer > 0.0:
+		return clampf(wave_surge_recovery_timer / maxf(WAVE_MINI_SURGE_RECOVERY_DURATION, 0.01), 0.0, 1.0) * 0.3
+	return 0.0
 
 func _update_halo_charge(delta: float) -> void:
 	halo_toggle_lock_timer = maxf(0.0, halo_toggle_lock_timer - delta)
@@ -1114,6 +1552,8 @@ func _spawn_boss() -> void:
 	_connect_enemy_signals(enemy)
 	enemies_root.add_child(enemy)
 	enemies.append(enemy)
+	if kind == ENEMY_FINAL_BOSS:
+		_play_ui_final_boss_appear_sfx()
 
 func _spawn_summoned_enemies_from_queue() -> void:
 	if summon_spawns.is_empty():
@@ -1134,15 +1574,73 @@ func _spawn_summoned_enemies_from_queue() -> void:
 
 	summon_spawns.clear()
 
+func _count_active_enemies_by_kind(kind: int) -> int:
+	var count: int = 0
+	for enemy: Enemy in enemies:
+		if enemy.health > 0.0 and int(enemy.kind) == kind:
+			count += 1
+	return count
+
 func _pick_enemy_kind() -> int:
 	var d_wave: int = _difficulty_wave_value()
-	var elite_chance: float = minf(0.035 + float(d_wave) * 0.007, 0.15)
-	var ranged_chance: float = minf(0.055 + float(d_wave) * 0.004, 0.12)
-	var roll: float = randf()
-	if roll < elite_chance:
+	var cycle_wave: int = _current_cycle_wave()
+	var elite_count: int = _count_active_enemies_by_kind(ENEMY_ELITE)
+	var ranged_count: int = _count_active_enemies_by_kind(ENEMY_RANGED)
+	var flyer_count: int = _count_active_enemies_by_kind(ENEMY_FLYER)
+	var thrower_count: int = _count_active_enemies_by_kind(ENEMY_THROWER)
+
+	var elite_cap: int = 3 if cycle_wave < 8 else 4
+	var flyer_cap: int = 0
+	if cycle_wave >= 4:
+		flyer_cap = 3
+	if cycle_wave >= 8:
+		flyer_cap = 5
+	var thrower_cap: int = 0
+	if cycle_wave >= 3:
+		thrower_cap = 2
+	if cycle_wave >= 8:
+		thrower_cap = 4
+	var projectile_enemy_cap: int = 3 if cycle_wave < 6 else (5 if cycle_wave < 10 else 7)
+	var projectile_enemy_count: int = ranged_count + thrower_count
+
+	var weight_swarm: float = 1.0 + float(max(0, cycle_wave - 6)) * 0.03
+	var weight_elite: float = minf(0.035 + float(d_wave) * 0.006, 0.12)
+	var weight_ranged: float = minf(0.06 + float(d_wave) * 0.0032, 0.115)
+	var weight_flyer: float = 0.0
+	var weight_thrower: float = 0.0
+	if cycle_wave >= 4:
+		weight_flyer = minf(0.05 + float(cycle_wave - 4) * 0.004, 0.11)
+	if cycle_wave >= 3:
+		weight_thrower = minf(0.045 + float(cycle_wave - 3) * 0.0038, 0.105)
+
+	if elite_count >= elite_cap:
+		weight_elite = 0.0
+	if flyer_count >= flyer_cap:
+		weight_flyer = 0.0
+	if thrower_count >= thrower_cap or projectile_enemy_count >= projectile_enemy_cap:
+		weight_thrower = 0.0
+	if ranged_count >= projectile_enemy_cap or projectile_enemy_count >= projectile_enemy_cap:
+		weight_ranged = 0.0
+
+	var total_weight: float = weight_swarm + weight_elite + weight_ranged + weight_flyer + weight_thrower
+	if total_weight <= 0.001:
+		return ENEMY_SWARM
+
+	var roll: float = randf() * total_weight
+	if roll < weight_swarm:
+		return ENEMY_SWARM
+	roll -= weight_swarm
+	if roll < weight_elite:
 		return ENEMY_ELITE
-	if roll < elite_chance + ranged_chance:
+	roll -= weight_elite
+	if roll < weight_ranged:
 		return ENEMY_RANGED
+	roll -= weight_ranged
+	if roll < weight_flyer:
+		return ENEMY_FLYER
+	roll -= weight_flyer
+	if roll < weight_thrower:
+		return ENEMY_THROWER
 	return ENEMY_SWARM
 
 func _pick_spawn_target(enemy_kind: int) -> Hero:
@@ -1158,7 +1656,11 @@ func _pick_spawn_target(enemy_kind: int) -> Hero:
 	match enemy_kind:
 		ENEMY_SWARM:
 			preferred_kind = HERO_KNIGHT
+		ENEMY_FLYER:
+			preferred_kind = HERO_ROGUE
 		ENEMY_RANGED:
+			preferred_kind = HERO_RANGER
+		ENEMY_THROWER:
 			preferred_kind = HERO_RANGER
 		ENEMY_ELITE:
 			preferred_kind = HERO_ROGUE
@@ -1190,26 +1692,37 @@ func _find_alive_hero_by_kind(alive: Array[Hero], kind: int) -> Hero:
 			return hero
 	return null
 
+func _playfield_rect() -> Rect2:
+	var min_x: float = arena_rect.position.x + WALL_SIDE_BLOCK + PLAYFIELD_INNER_PAD
+	var max_x: float = arena_rect.end.x - WALL_SIDE_BLOCK - PLAYFIELD_INNER_PAD
+	var min_y: float = arena_rect.position.y + WALL_TOP_BLOCK + PLAYFIELD_INNER_PAD
+	var max_y: float = arena_rect.end.y - WALL_BOTTOM_BLOCK - PLAYFIELD_INNER_PAD
+	if max_x <= min_x or max_y <= min_y:
+		return arena_rect
+	return Rect2(Vector2(min_x, min_y), Vector2(max_x - min_x, max_y - min_y))
+
 func _random_spawn_point() -> Vector2:
+	var play_rect: Rect2 = _playfield_rect()
 	var edge: int = randi() % 4
-	var x: float = randf_range(arena_rect.position.x, arena_rect.end.x)
-	var y: float = randf_range(arena_rect.position.y, arena_rect.end.y)
+	var x: float = randf_range(play_rect.position.x, play_rect.end.x)
+	var y: float = randf_range(play_rect.position.y, play_rect.end.y)
 	match edge:
 		0:
-			return Vector2(x, arena_rect.position.y + 6.0)
+			return Vector2(x, play_rect.position.y + 6.0)
 		1:
-			return Vector2(x, arena_rect.end.y - 6.0)
+			return Vector2(x, play_rect.end.y - 6.0)
 		2:
-			return Vector2(arena_rect.position.x + 6.0, y)
+			return Vector2(play_rect.position.x + 6.0, y)
 		_:
-			return Vector2(arena_rect.end.x - 6.0, y)
+			return Vector2(play_rect.end.x - 6.0, y)
 
 func _boss_spawn_point() -> Vector2:
-	return Vector2(arena_rect.position.x + arena_rect.size.x * 0.5, arena_rect.position.y + 18.0)
+	return _playfield_rect().get_center()
 
 func _clamp_point_to_arena(point: Vector2) -> Vector2:
-	var x: float = clampf(point.x, arena_rect.position.x + 12.0, arena_rect.end.x - 12.0)
-	var y: float = clampf(point.y, arena_rect.position.y + 12.0, arena_rect.end.y - 12.0)
+	var play_rect: Rect2 = _playfield_rect()
+	var x: float = clampf(point.x, play_rect.position.x + 12.0, play_rect.end.x - 12.0)
+	var y: float = clampf(point.y, play_rect.position.y + 12.0, play_rect.end.y - 12.0)
 	return Vector2(x, y)
 
 func _cleanup_dead_enemies() -> void:
@@ -1219,6 +1732,7 @@ func _cleanup_dead_enemies() -> void:
 			var kill_mult: float = PERFECT_POSITION_KILL_FLASH_MULT if perfect_position_active else 1.0
 			_spawn_kill_flash(dead_enemy.global_position, dead_enemy.body_radius, kill_mult)
 			_add_camera_shake(0.2 + team_power * 0.45 + (PERFECT_POSITION_HIT_SHAKE_BONUS if perfect_position_active else 0.0))
+			_maybe_spawn_health_drop(dead_enemy)
 			enemies[i].queue_free()
 			enemies.remove_at(i)
 
@@ -1275,12 +1789,6 @@ func _update_team_power(delta: float) -> void:
 	for hero: Hero in heroes:
 		hero.set_team_power(team_power)
 
-	if team_power > TEAM_POWER_REGEN_THRESHOLD:
-		var regen_t: float = (team_power - TEAM_POWER_REGEN_THRESHOLD) / maxf(1.0 - TEAM_POWER_REGEN_THRESHOLD, 0.01)
-		var regen_value: float = TEAM_POWER_REGEN_PER_SEC * regen_t * delta
-		for hero: Hero in alive:
-			hero.heal(regen_value)
-
 func _update_perfect_position_state(delta: float) -> void:
 	perfect_position_feedback_timer = maxf(0.0, perfect_position_feedback_timer - delta)
 	var alive: Array[Hero] = []
@@ -1295,19 +1803,49 @@ func _update_perfect_position_state(delta: float) -> void:
 			all_inside_inner_ring = false
 			break
 
-	var entering: bool = all_inside_inner_ring and not perfect_position_active
-	perfect_position_active = all_inside_inner_ring
+	if all_inside_inner_ring:
+		perfect_position_inside_timer += delta
+		perfect_position_outside_timer = 0.0
+		if perfect_position_active:
+			perfect_position_active_hold_timer += delta
+	else:
+		perfect_position_outside_timer += delta
+		perfect_position_inside_timer = 0.0
+		if perfect_position_outside_timer >= PERFECT_POSITION_SOUND_REARM_TIME:
+			perfect_position_sound_armed = true
+
+	var entering: bool = false
+	if perfect_position_active:
+		if not all_inside_inner_ring and perfect_position_outside_timer >= PERFECT_POSITION_EXIT_GRACE_TIME:
+			perfect_position_active = false
+			var can_play_break: bool = perfect_position_break_sound_armed \
+				and perfect_position_break_sound_cooldown_timer <= 0.0 \
+				and perfect_position_active_hold_timer >= PERFECT_POSITION_BREAK_MIN_ACTIVE_TIME
+			if can_play_break:
+				_play_perfect_position_break_sfx()
+				perfect_position_break_sound_cooldown_timer = PERFECT_POSITION_BREAK_SOUND_COOLDOWN
+				perfect_position_break_sound_armed = false
+			perfect_position_active_hold_timer = 0.0
+	else:
+		if all_inside_inner_ring and perfect_position_inside_timer >= PERFECT_POSITION_ENTER_STABLE_TIME:
+			perfect_position_active = true
+			entering = true
+			perfect_position_active_hold_timer = 0.0
+
 	if not perfect_position_active:
 		perfect_position_feedback_timer = 0.0
+		perfect_position_active_hold_timer = 0.0
 		return
 
 	if entering:
 		perfect_position_feedback_timer = PERFECT_POSITION_FEEDBACK_DURATION
 		_spawn_kill_flash(team_power_center, 26.0, 1.35)
 		_add_camera_shake(0.48)
-		if perfect_position_sound_cooldown_timer <= 0.0:
+		if perfect_position_sound_armed and perfect_position_sound_cooldown_timer <= 0.0:
 			_play_perfect_position_sfx()
 			perfect_position_sound_cooldown_timer = PERFECT_POSITION_SOUND_COOLDOWN
+			perfect_position_sound_armed = false
+		perfect_position_break_sound_armed = true
 
 func _spawn_projectiles_from_queue() -> void:
 	if projectile_spawns.is_empty():
@@ -1354,7 +1892,7 @@ func _ensure_spectral_halo_slots() -> void:
 func _spectral_halo_bounds() -> Rect2:
 	var margin: float = SPECTRAL_HALO_RADIUS + 6.0
 	var view_rect: Rect2 = _viewport_rect_world().grow(-margin)
-	var clamp_rect: Rect2 = arena_rect.grow(-margin)
+	var clamp_rect: Rect2 = _playfield_rect().grow(-margin)
 	var intersection: Rect2 = clamp_rect.intersection(view_rect)
 	if intersection.size.x > 48.0 and intersection.size.y > 48.0:
 		return intersection
@@ -1433,25 +1971,29 @@ func _update_spectral_halo(delta: float) -> void:
 	for h in range(spectral_halo_count):
 		if spectral_halo_hit_timers[h] > 0.0:
 			continue
-		var halo_pos: Vector2 = spectral_halo_positions[h]
-		for enemy: Enemy in enemies:
-			if enemy.health <= 0.0:
-				continue
-			var contact_dist: float = SPECTRAL_HALO_RADIUS + enemy.body_radius
-			if halo_pos.distance_squared_to(enemy.global_position) > contact_dist * contact_dist:
-				continue
-			enemy.set_damage_source(halo_pos)
-			var contact_damage: float = SPECTRAL_HALO_CONTACT_DAMAGE * (1.0 + team_power * 0.75)
-			enemy.take_damage(contact_damage)
-			spectral_halo_hit_timers[h] = SPECTRAL_HALO_HIT_COOLDOWN
-			_add_camera_shake(0.14)
-			break
+			var halo_pos: Vector2 = spectral_halo_positions[h]
+			var halo_velocity: Vector2 = Vector2.ZERO
+			if h >= 0 and h < spectral_halo_velocities.size():
+				halo_velocity = spectral_halo_velocities[h]
+			for enemy: Enemy in enemies:
+				if enemy.health <= 0.0:
+					continue
+				var contact_dist: float = SPECTRAL_HALO_RADIUS + enemy.body_radius
+				if halo_pos.distance_squared_to(enemy.global_position) > contact_dist * contact_dist:
+					continue
+				enemy.set_damage_source(halo_pos)
+				enemy.set_damage_direction(halo_velocity)
+				var contact_damage: float = SPECTRAL_HALO_CONTACT_DAMAGE * (1.0 + team_power * 0.75)
+				enemy.take_damage(contact_damage)
+				spectral_halo_hit_timers[h] = SPECTRAL_HALO_HIT_COOLDOWN
+				_add_camera_shake(0.14)
+				break
 
 func _update_projectiles(delta: float) -> void:
 	if projectiles.is_empty():
 		return
 
-	var extended_arena: Rect2 = arena_rect.grow(48.0)
+	var extended_arena: Rect2 = _playfield_rect().grow(48.0)
 	for i in range(projectiles.size() - 1, -1, -1):
 		var projectile: Projectile = projectiles[i]
 		var alive: bool = bool(projectile.process_tick(delta, extended_arena))
@@ -1470,6 +2012,7 @@ func _update_projectiles(delta: float) -> void:
 					var impact_dist: float = projectile_radius + enemy.body_radius
 					if projectile_pos.distance_squared_to(enemy.global_position) <= impact_dist * impact_dist:
 						enemy.set_damage_source(projectile_pos)
+						enemy.set_damage_direction(projectile.velocity)
 						enemy.take_damage(projectile_damage)
 						hit = true
 						break
@@ -1568,6 +2111,7 @@ func _continue_after_main_boss() -> void:
 	upgrade_phase_active = false
 	intermission_timer = 0.0
 	spawning = false
+	health_drops.clear()
 	_revive_all_heroes_for_continue()
 	_set_world_visible_for_upgrade(true)
 	_sync_halo_state()
@@ -1584,14 +2128,132 @@ func _revive_all_heroes_for_continue() -> void:
 	]
 	for i in range(heroes.size()):
 		var hero: Hero = heroes[i]
-		if hero.health > 0.0:
-			continue
+		var was_dead: bool = hero.health <= 0.0
 		hero.health = hero.max_health
-		hero.global_position = _clamp_point_to_arena(anchor + revive_offsets[i % revive_offsets.size()])
+		if was_dead:
+			hero.global_position = _clamp_point_to_arena(anchor + revive_offsets[i % revive_offsets.size()])
 		hero.current_velocity = Vector2.ZERO
 		hero.knockback_velocity = Vector2.ZERO
 		hero.pending_damage_source = Vector2.ZERO
 		hero.queue_redraw()
+
+func _maybe_spawn_health_drop(dead_enemy: Enemy) -> void:
+	if dead_enemy == null:
+		return
+	var kind: int = int(dead_enemy.kind)
+	var drop_chance: float = 0.0
+	var heal_amount: float = 0.0
+	var drop_radius: float = 0.0
+	match kind:
+		ENEMY_SWARM:
+			drop_chance = 0.09
+			heal_amount = 10.0
+			drop_radius = 6.0
+		ENEMY_FLYER:
+			drop_chance = 0.1
+			heal_amount = 11.0
+			drop_radius = 6.2
+		ENEMY_RANGED:
+			drop_chance = 0.13
+			heal_amount = 12.0
+			drop_radius = 6.4
+		ENEMY_THROWER:
+			drop_chance = 0.14
+			heal_amount = 13.0
+			drop_radius = 6.6
+		ENEMY_ELITE:
+			drop_chance = 0.24
+			heal_amount = 18.0
+			drop_radius = 7.2
+		ENEMY_BOSS:
+			drop_chance = 1.0
+			heal_amount = 28.0
+			drop_radius = 8.8
+		ENEMY_FINAL_BOSS:
+			drop_chance = 1.0
+			heal_amount = 42.0
+			drop_radius = 10.0
+		_:
+			return
+
+	if randf() > drop_chance:
+		return
+	_spawn_health_drop(dead_enemy.global_position, heal_amount, drop_radius)
+	if kind == ENEMY_BOSS and randf() < 0.45:
+		_spawn_health_drop(dead_enemy.global_position + Vector2(randf_range(-10.0, 10.0), randf_range(-10.0, 10.0)), heal_amount * 0.65, 7.4)
+
+func _spawn_health_drop(position: Vector2, heal_amount: float, drop_radius: float) -> void:
+	if heal_amount <= 0.0:
+		return
+	var burst_velocity: Vector2 = Vector2.RIGHT.rotated(randf() * TAU) * randf_range(22.0, 78.0)
+	var drop: Dictionary = {
+		"position": _clamp_point_to_arena(position),
+		"velocity": burst_velocity,
+		"heal": heal_amount,
+		"radius": maxf(5.0, drop_radius),
+		"life": HEALTH_DROP_LIFETIME,
+		"pulse": randf() * TAU
+	}
+	health_drops.append(drop)
+
+func _update_health_drops(delta: float) -> void:
+	if health_drops.is_empty():
+		return
+	var attract_radius_sq: float = HEALTH_DROP_ATTRACT_RADIUS * HEALTH_DROP_ATTRACT_RADIUS
+	for i in range(health_drops.size() - 1, -1, -1):
+		var drop: Dictionary = health_drops[i]
+		var pos_variant: Variant = drop.get("position", Vector2.ZERO)
+		var vel_variant: Variant = drop.get("velocity", Vector2.ZERO)
+		var pos: Vector2 = pos_variant if pos_variant is Vector2 else Vector2.ZERO
+		var vel: Vector2 = vel_variant if vel_variant is Vector2 else Vector2.ZERO
+		var heal_amount: float = float(drop.get("heal", 0.0))
+		var radius: float = float(drop.get("radius", 6.0))
+		var life: float = float(drop.get("life", HEALTH_DROP_LIFETIME)) - delta
+		if life <= 0.0:
+			health_drops.remove_at(i)
+			continue
+
+		var nearest_hero: Hero = null
+		var nearest_dist_sq: float = INF
+		for hero: Hero in heroes:
+			if hero.health <= 0.0:
+				continue
+			if hero.health >= hero.max_health - 0.5:
+				continue
+			var dist_sq: float = pos.distance_squared_to(hero.global_position)
+			if dist_sq < nearest_dist_sq and dist_sq <= attract_radius_sq:
+				nearest_dist_sq = dist_sq
+				nearest_hero = hero
+		if nearest_hero != null:
+			var to_hero: Vector2 = nearest_hero.global_position - pos
+			if to_hero.length_squared() > 0.0001:
+				vel += to_hero.normalized() * HEALTH_DROP_PULL_SPEED * delta
+				vel = vel.limit_length(HEALTH_DROP_PULL_SPEED)
+
+		pos += vel * delta
+		vel = vel.move_toward(Vector2.ZERO, HEALTH_DROP_DRAG * delta)
+		pos = _clamp_point_to_arena(pos)
+
+		var picked_up: bool = false
+		for hero: Hero in heroes:
+			if hero.health <= 0.0:
+				continue
+			var pickup_dist: float = hero.body_radius + radius + HEALTH_DROP_PICKUP_PAD
+			if pos.distance_squared_to(hero.global_position) > pickup_dist * pickup_dist:
+				continue
+			hero.heal(heal_amount)
+			hero.trigger_halo_switch_feedback()
+			_spawn_kill_flash(pos, radius * 1.6, 0.72)
+			picked_up = true
+			break
+		if picked_up:
+			health_drops.remove_at(i)
+			continue
+
+		drop["position"] = pos
+		drop["velocity"] = vel
+		drop["life"] = life
+		health_drops[i] = drop
 
 func _set_world_visible_for_upgrade(visible: bool) -> void:
 	heroes_root.visible = visible and not start_selection_active and not start_screen_active and not tutorial_screen_active and not boss_victory_prompt_active
@@ -1610,18 +2272,25 @@ func _collect_attack_unlock_priority(tank_alive: bool, ranger_alive: bool, rogue
 		priority.append(UPGRADE_HALO_SPECTER)
 	elif spectral_halo_count < SPECTRAL_HALO_MAX_COUNT and int(upgrade_levels.get(UPGRADE_HALO_ECHO, 0)) <= 0:
 		priority.append(UPGRADE_HALO_ECHO)
+	var hero_attack_unlocks: Array[int] = []
 	if tank_alive and int(upgrade_levels.get(UPGRADE_TANK_HEAVY_ATTACK, 0)) <= 0:
-		priority.append(UPGRADE_TANK_HEAVY_ATTACK)
+		hero_attack_unlocks.append(UPGRADE_TANK_HEAVY_ATTACK)
 	elif tank_alive and int(upgrade_levels.get(UPGRADE_TANK_HEAVY_ATTACK_PLUS, 0)) <= 0:
-		priority.append(UPGRADE_TANK_HEAVY_ATTACK_PLUS)
+		hero_attack_unlocks.append(UPGRADE_TANK_HEAVY_ATTACK_PLUS)
 	if ranger_alive and int(upgrade_levels.get(UPGRADE_RANGER_TRIPLE_ARROWS, 0)) <= 0:
-		priority.append(UPGRADE_RANGER_TRIPLE_ARROWS)
+		hero_attack_unlocks.append(UPGRADE_RANGER_TRIPLE_ARROWS)
 	elif ranger_alive and int(upgrade_levels.get(UPGRADE_RANGER_TRIPLE_ARROWS_PLUS, 0)) <= 0:
-		priority.append(UPGRADE_RANGER_TRIPLE_ARROWS_PLUS)
+		hero_attack_unlocks.append(UPGRADE_RANGER_TRIPLE_ARROWS_PLUS)
 	if rogue_alive and int(upgrade_levels.get(UPGRADE_ROGUE_TWIN_FANGS, 0)) <= 0:
-		priority.append(UPGRADE_ROGUE_TWIN_FANGS)
+		hero_attack_unlocks.append(UPGRADE_ROGUE_TWIN_FANGS)
+		# Slight extra weight so Shadow Zip shows up at parity with other class unlocks.
+		hero_attack_unlocks.append(UPGRADE_ROGUE_TWIN_FANGS)
 	elif rogue_alive and int(upgrade_levels.get(UPGRADE_ROGUE_TWIN_FANGS_PLUS, 0)) <= 0:
-		priority.append(UPGRADE_ROGUE_TWIN_FANGS_PLUS)
+		hero_attack_unlocks.append(UPGRADE_ROGUE_TWIN_FANGS_PLUS)
+		hero_attack_unlocks.append(UPGRADE_ROGUE_TWIN_FANGS_PLUS)
+	hero_attack_unlocks.shuffle()
+	for upgrade_id in hero_attack_unlocks:
+		priority.append(upgrade_id)
 	return priority
 
 func _roll_upgrade_choices() -> Array[int]:
@@ -1721,6 +2390,13 @@ func _start_screen_button_rect() -> Rect2:
 		START_SCREEN_BUTTON_SIZE
 	)
 
+func _start_screen_options_button_rect() -> Rect2:
+	var view_size: Vector2 = _viewport_size()
+	return Rect2(
+		Vector2((view_size.x - OPTIONS_BUTTON_SIZE.x) * 0.5, view_size.y * 0.68),
+		OPTIONS_BUTTON_SIZE
+	)
+
 func _tutorial_panel_rect_screen() -> Rect2:
 	var view_size: Vector2 = _viewport_size()
 	var max_w: float = minf(view_size.x - 24.0, maxf(460.0, view_size.x - TUTORIAL_PANEL_MARGIN_X * 2.0))
@@ -1797,11 +2473,49 @@ func _pause_home_button_rect() -> Rect2:
 		PAUSE_BUTTON_SIZE
 	)
 
+func _pause_options_button_rect() -> Rect2:
+	var view_size: Vector2 = _viewport_size()
+	var panel: Rect2 = Rect2((view_size - PAUSE_PANEL_SIZE) * 0.5, PAUSE_PANEL_SIZE)
+	var size: Vector2 = Vector2(220.0, 50.0)
+	var x: float = panel.position.x + (panel.size.x - size.x) * 0.5
+	var y: float = panel.position.y + 92.0
+	return Rect2(
+		Vector2(x, y),
+		size
+	)
+
+func _options_panel_rect_screen() -> Rect2:
+	var view_size: Vector2 = _viewport_size()
+	return Rect2((view_size - OPTIONS_PANEL_SIZE) * 0.5, OPTIONS_PANEL_SIZE)
+
+func _options_music_slider_rect_screen() -> Rect2:
+	var panel: Rect2 = _options_panel_rect_screen()
+	return Rect2(
+		Vector2(panel.position.x + 72.0, panel.position.y + 128.0),
+		Vector2(panel.size.x - 144.0, 20.0)
+	)
+
+func _options_sfx_slider_rect_screen() -> Rect2:
+	var panel: Rect2 = _options_panel_rect_screen()
+	return Rect2(
+		Vector2(panel.position.x + 72.0, panel.position.y + 206.0),
+		Vector2(panel.size.x - 144.0, 20.0)
+	)
+
+func _options_close_button_rect_screen() -> Rect2:
+	var panel: Rect2 = _options_panel_rect_screen()
+	return Rect2(
+		Vector2(panel.position.x + (panel.size.x - OPTIONS_CLOSE_BUTTON_SIZE.x) * 0.5, panel.end.y - 78.0),
+		OPTIONS_CLOSE_BUTTON_SIZE
+	)
+
 func _open_starting_hero_menu() -> void:
 	start_screen_active = false
 	tutorial_screen_active = false
 	start_selection_active = true
 	pause_menu_active = false
+	options_menu_active = false
+	options_drag_slider = -1
 	boss_victory_prompt_active = false
 	game_over = false
 	_start_bgm_menu()
@@ -1813,6 +2527,8 @@ func _open_start_screen() -> void:
 	tutorial_screen_active = false
 	start_selection_active = false
 	pause_menu_active = false
+	options_menu_active = false
+	options_drag_slider = -1
 	boss_victory_prompt_active = false
 	game_over = false
 	_start_bgm_menu()
@@ -1824,6 +2540,8 @@ func _open_tutorial_screen() -> void:
 	tutorial_screen_active = true
 	start_selection_active = false
 	pause_menu_active = false
+	options_menu_active = false
+	options_drag_slider = -1
 	boss_victory_prompt_active = false
 	game_over = false
 	_start_bgm_menu()
@@ -1832,15 +2550,65 @@ func _open_tutorial_screen() -> void:
 
 func _open_pause_menu() -> void:
 	pause_menu_active = true
+	options_menu_active = false
+	options_drag_slider = -1
 	heroes_root.visible = false
 	enemies_root.visible = false
 	projectiles_root.visible = false
+	_set_bgm_paused_mix(true)
 
 func _resume_from_pause() -> void:
 	pause_menu_active = false
+	options_menu_active = false
+	options_drag_slider = -1
 	heroes_root.visible = true
 	enemies_root.visible = true
 	projectiles_root.visible = true
+	_set_bgm_paused_mix(false)
+
+func _open_options_menu() -> void:
+	options_menu_active = true
+	options_drag_slider = -1
+
+func _close_options_menu() -> void:
+	options_menu_active = false
+	options_drag_slider = -1
+
+func _set_music_volume_percent(value: float) -> void:
+	music_volume_percent = clampf(value, 0.0, 100.0)
+	_apply_audio_mix_levels()
+
+func _set_sfx_volume_percent(value: float) -> void:
+	sfx_volume_percent = clampf(value, 0.0, 100.0)
+	_apply_audio_mix_levels()
+
+func _slider_value_from_screen_point(screen_point: Vector2, slider_rect: Rect2) -> float:
+	if slider_rect.size.x <= 0.0001:
+		return 0.0
+	var t: float = clampf((screen_point.x - slider_rect.position.x) / slider_rect.size.x, 0.0, 1.0)
+	return t * 100.0
+
+func _handle_options_click(screen_point: Vector2) -> bool:
+	var close_rect: Rect2 = _options_close_button_rect_screen()
+	var music_rect: Rect2 = _options_music_slider_rect_screen()
+	var sfx_rect: Rect2 = _options_sfx_slider_rect_screen()
+	if close_rect.has_point(screen_point):
+		_play_ui_click_sfx()
+		_close_options_menu()
+		return true
+	if music_rect.grow(8.0).has_point(screen_point):
+		_set_music_volume_percent(_slider_value_from_screen_point(screen_point, music_rect))
+		options_drag_slider = 0
+		return true
+	if sfx_rect.grow(8.0).has_point(screen_point):
+		_set_sfx_volume_percent(_slider_value_from_screen_point(screen_point, sfx_rect))
+		options_drag_slider = 1
+		return true
+	# If click is outside panel, close menu.
+	if not _options_panel_rect_screen().has_point(screen_point):
+		_close_options_menu()
+		return true
+	return true
 
 func _return_to_main_menu() -> void:
 	_stop_bgm()
@@ -1862,7 +2630,7 @@ func _choose_starting_hero(index: int) -> void:
 	if heroes[index].health <= 0.0:
 		return
 
-	_play_ui_start_confirm_sfx()
+	_play_ui_character_select_sfx()
 	start_selection_active = false
 	pause_menu_active = false
 	boss_victory_prompt_active = false
@@ -1930,45 +2698,317 @@ func _add_camera_shake(amount: float) -> void:
 	camera_shake_timer = maxf(camera_shake_timer, CAMERA_SHAKE_DURATION)
 
 func _setup_bgm() -> void:
-	bgm_player = AudioStreamPlayer.new()
-	bgm_player.name = "BGMPlayer"
-	bgm_player.volume_db = BGM_MENU_VOLUME_DB
-	var stream: AudioStream = load(BGM_PATH) as AudioStream
-	if stream == null:
-		push_warning("BGM file not found at %s" % [BGM_PATH])
-		add_child(bgm_player)
+	bgm_players.clear()
+	bgm_menu_stream = _load_bgm_stream(BGM_MENU_PATH)
+	bgm_game_stream = _load_bgm_stream(BGM_GAME_PATH)
+	bgm_game_low_health_stream = _load_bgm_stream(BGM_GAME_LOW_HEALTH_PATH)
+	if bgm_game_stream == null:
+		bgm_game_stream = bgm_menu_stream
+	if bgm_game_low_health_stream == null:
+		bgm_game_low_health_stream = bgm_game_stream
+	if bgm_menu_stream == null:
+		bgm_menu_stream = bgm_game_stream
+	if bgm_menu_stream == null:
+		push_warning("No BGM stream could be loaded.")
 		return
+
+	for i in range(2):
+		var player: AudioStreamPlayer = AudioStreamPlayer.new()
+		player.name = "BGMPlayer%d" % [i]
+		player.bus = "Master"
+		player.stream = bgm_menu_stream
+		player.volume_db = (BGM_MENU_VOLUME_DB + _music_mix_db()) if i == 0 else (BGM_SILENT_DB + _music_mix_db())
+		add_child(player)
+		bgm_players.append(player)
+
+	bgm_low_layer_player = null
+	if bgm_game_low_health_stream != null:
+		bgm_low_layer_player = AudioStreamPlayer.new()
+		bgm_low_layer_player.name = "BGMLowHealthLayerPlayer"
+		bgm_low_layer_player.bus = "Master"
+		bgm_low_layer_player.stream = bgm_game_low_health_stream
+		bgm_low_layer_player.volume_db = BGM_SILENT_DB + _music_mix_db()
+		add_child(bgm_low_layer_player)
+
+	bgm_target_volume_db = BGM_MENU_VOLUME_DB
+	bgm_active_mode = BGM_MODE_MENU
+	bgm_low_health_active = false
+	bgm_low_layer_mix = 0.0
+	bgm_active_player_index = 0
+	bgm_crossfade_active = false
+	bgm_crossfade_timer = 0.0
+	bgm_crossfade_from_index = 0
+	bgm_crossfade_to_index = 1
+	var starter: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
+	if starter != null:
+		starter.play()
+
+func _bgm_player_at(index: int) -> AudioStreamPlayer:
+	if index < 0 or index >= bgm_players.size():
+		return null
+	return bgm_players[index]
+
+func _load_bgm_stream(path: String) -> AudioStream:
+	var stream: AudioStream = load(path) as AudioStream
+	if stream == null:
+		push_warning("BGM file not found at %s" % [path])
+		return null
+	# Disable built-in looping and do an explicit crossfade loop to avoid hard cut restarts.
 	var mp3_stream: AudioStreamMP3 = stream as AudioStreamMP3
 	if mp3_stream != null:
-		mp3_stream.loop = true
-	bgm_player.stream = stream
-	add_child(bgm_player)
+		mp3_stream.loop = false
+	var ogg_stream: AudioStreamOggVorbis = stream as AudioStreamOggVorbis
+	if ogg_stream != null:
+		ogg_stream.loop = false
+	return stream
+
+func _active_bgm_stream_for_mode(mode: int) -> AudioStream:
+	if mode == BGM_MODE_GAME_LOW_HEALTH:
+		return bgm_game_stream
+	if mode == BGM_MODE_GAME:
+		return bgm_game_stream
+	return bgm_menu_stream
+
+func _switch_bgm_mode(mode: int, restart_from_start: bool) -> void:
+	if bgm_players.is_empty():
+		return
+	var desired_stream: AudioStream = _active_bgm_stream_for_mode(mode)
+	if desired_stream == null:
+		return
+	var stream_changed: bool = false
+	for player: AudioStreamPlayer in bgm_players:
+		if player == null:
+			continue
+		if player.stream != desired_stream:
+			player.stream = desired_stream
+			stream_changed = true
+	bgm_active_mode = mode
+	if stream_changed or restart_from_start:
+		_restart_bgm_now()
+		return
+	var active_player: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
+	if active_player != null and not active_player.playing:
+		active_player.volume_db = bgm_target_volume_db + _music_mix_db()
+		active_player.play()
 
 func _start_bgm_menu() -> void:
-	if bgm_player == null:
+	if bgm_players.is_empty():
 		return
-	if bgm_player.stream == null:
-		return
-	bgm_player.volume_db = BGM_MENU_VOLUME_DB
-	if not bgm_player.playing:
-		bgm_player.play()
+	bgm_target_volume_db = BGM_MENU_VOLUME_DB
+	bgm_low_health_active = false
+	bgm_low_layer_mix = 0.0
+	if bgm_low_layer_player != null:
+		if bgm_low_layer_player.playing:
+			bgm_low_layer_player.stop()
+		bgm_low_layer_player.volume_db = BGM_SILENT_DB + _music_mix_db()
+	_switch_bgm_mode(BGM_MODE_MENU, false)
 
 func _start_bgm_game() -> void:
-	if bgm_player == null:
+	if bgm_players.is_empty():
 		return
-	if bgm_player.stream == null:
+	bgm_low_health_active = false
+	bgm_low_layer_mix = 0.0
+	if bgm_low_layer_player != null:
+		bgm_low_layer_player.volume_db = BGM_SILENT_DB + _music_mix_db()
+	bgm_target_volume_db = BGM_GAME_VOLUME_DB
+	# Restart from the beginning when a run starts and ensure game track is active.
+	_switch_bgm_mode(BGM_MODE_GAME, true)
+
+func _set_bgm_paused_mix(paused: bool) -> void:
+	if bgm_players.is_empty():
 		return
-	bgm_player.volume_db = BGM_GAME_VOLUME_DB
-	# Restart from the beginning when a run starts.
-	if bgm_player.playing:
-		bgm_player.stop()
-	bgm_player.play()
+	if paused:
+		# Keep current track, just duck to menu-level volume while paused.
+		bgm_target_volume_db = BGM_MENU_VOLUME_DB
+		return
+	var in_game_mode: bool = bgm_active_mode == BGM_MODE_GAME or bgm_active_mode == BGM_MODE_GAME_LOW_HEALTH
+	bgm_target_volume_db = BGM_GAME_VOLUME_DB if in_game_mode else BGM_MENU_VOLUME_DB
+
+func _restart_bgm_now() -> void:
+	if bgm_players.is_empty():
+		return
+	bgm_crossfade_active = false
+	bgm_crossfade_timer = 0.0
+	bgm_crossfade_from_index = 0
+	bgm_crossfade_to_index = 1
+	bgm_active_player_index = 0
+	for i in range(bgm_players.size()):
+		var player: AudioStreamPlayer = _bgm_player_at(i)
+		if player == null:
+			continue
+		if player.playing:
+			player.stop()
+		player.volume_db = (bgm_target_volume_db + _music_mix_db()) if i == bgm_active_player_index else (BGM_SILENT_DB + _music_mix_db())
+	var active_player: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
+	if active_player != null:
+		active_player.play()
+	if bgm_low_layer_player != null:
+		if bgm_low_layer_player.playing:
+			bgm_low_layer_player.stop()
+		bgm_low_layer_player.volume_db = BGM_SILENT_DB + _music_mix_db()
 
 func _stop_bgm() -> void:
-	if bgm_player == null:
+	bgm_crossfade_active = false
+	bgm_crossfade_timer = 0.0
+	bgm_low_health_active = false
+	bgm_low_layer_mix = 0.0
+	for player: AudioStreamPlayer in bgm_players:
+		if player != null and player.playing:
+			player.stop()
+	if bgm_low_layer_player != null and bgm_low_layer_player.playing:
+		bgm_low_layer_player.stop()
+
+func _is_gameplay_music_state() -> bool:
+	return not start_screen_active \
+		and not tutorial_screen_active \
+		and not start_selection_active \
+		and not pause_menu_active \
+		and not boss_victory_prompt_active \
+		and not game_over \
+		and not upgrade_phase_active
+
+func _average_alive_hero_health_ratio() -> float:
+	var ratio_sum: float = 0.0
+	var alive_count: int = 0
+	for hero: Hero in heroes:
+		if hero.health <= 0.0:
+			continue
+		ratio_sum += hero.health_ratio()
+		alive_count += 1
+	if alive_count <= 0:
+		return -1.0
+	return ratio_sum / float(alive_count)
+
+func _update_gameplay_bgm_state() -> void:
+	if bgm_players.is_empty():
 		return
-	if bgm_player.playing:
-		bgm_player.stop()
+	if not _is_gameplay_music_state():
+		bgm_low_health_active = false
+		return
+	var avg_ratio: float = _average_alive_hero_health_ratio()
+	if avg_ratio < 0.0:
+		bgm_low_health_active = false
+		return
+	var should_use_low_track: bool = avg_ratio <= BGM_LOW_HEALTH_ENTER_RATIO
+	if bgm_low_health_active and avg_ratio < BGM_LOW_HEALTH_EXIT_RATIO:
+		should_use_low_track = true
+	bgm_low_health_active = should_use_low_track
+
+func _switch_game_bgm_variant(low_health: bool) -> void:
+	if bgm_players.size() < 2:
+		return
+	var desired_stream: AudioStream = bgm_game_low_health_stream if low_health else bgm_game_stream
+	if desired_stream == null:
+		return
+	var desired_mode: int = BGM_MODE_GAME_LOW_HEALTH if low_health else BGM_MODE_GAME
+	var active_player: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
+	if active_player != null and active_player.stream == desired_stream and bgm_active_mode == desired_mode:
+		return
+	var next_index: int = 1 - bgm_active_player_index
+	var next_player: AudioStreamPlayer = _bgm_player_at(next_index)
+	if next_player == null:
+		return
+	next_player.stream = desired_stream
+	if next_player.playing:
+		next_player.stop()
+	next_player.volume_db = BGM_SILENT_DB
+	next_player.play()
+	bgm_crossfade_active = true
+	bgm_crossfade_timer = 0.0
+	bgm_crossfade_from_index = bgm_active_player_index
+	bgm_crossfade_to_index = next_index
+	bgm_active_mode = desired_mode
+
+func _update_bgm_loop(delta: float) -> void:
+	if bgm_players.size() < 2:
+		return
+	var active_player: AudioStreamPlayer = _bgm_player_at(bgm_active_player_index)
+	if active_player == null or active_player.stream == null:
+		return
+	var music_db: float = _music_mix_db()
+	var gameplay_mode: bool = _is_gameplay_music_state() and (bgm_active_mode == BGM_MODE_GAME or bgm_active_mode == BGM_MODE_GAME_LOW_HEALTH)
+	var low_target_mix: float = 1.0 if (gameplay_mode and bgm_low_health_active) else 0.0
+	var low_mix_t: float = clampf(delta * BGM_LOW_LAYER_BLEND_SPEED, 0.0, 1.0)
+	bgm_low_layer_mix = lerpf(bgm_low_layer_mix, low_target_mix, low_mix_t)
+	if absf(bgm_low_layer_mix - low_target_mix) <= 0.0015:
+		bgm_low_layer_mix = low_target_mix
+	var main_duck_db: float = BGM_GAME_MAIN_DUCK_DB * bgm_low_layer_mix if gameplay_mode else 0.0
+	var target_db: float = bgm_target_volume_db + music_db - main_duck_db
+	var silent_db: float = BGM_SILENT_DB + music_db
+	if not active_player.playing:
+		active_player.volume_db = target_db
+		active_player.play()
+	else:
+		var stream_len: float = active_player.stream.get_length()
+		if stream_len <= BGM_LOOP_CROSSFADE_TIME + 0.08:
+			active_player.volume_db = lerpf(active_player.volume_db, target_db, clampf(delta * BGM_VOLUME_SMOOTH, 0.0, 1.0))
+		else:
+			if not bgm_crossfade_active:
+				var time_left: float = stream_len - active_player.get_playback_position()
+				if time_left <= BGM_LOOP_CROSSFADE_TIME:
+					var next_index: int = 1 - bgm_active_player_index
+					var next_player: AudioStreamPlayer = _bgm_player_at(next_index)
+					if next_player != null and next_player.stream != null:
+						if next_player.playing:
+							next_player.stop()
+						next_player.volume_db = silent_db
+						next_player.play()
+						bgm_crossfade_active = true
+						bgm_crossfade_timer = 0.0
+						bgm_crossfade_from_index = bgm_active_player_index
+						bgm_crossfade_to_index = next_index
+
+			if bgm_crossfade_active:
+				bgm_crossfade_timer += delta
+				var t: float = clampf(bgm_crossfade_timer / BGM_LOOP_CROSSFADE_TIME, 0.0, 1.0)
+				var from_player: AudioStreamPlayer = _bgm_player_at(bgm_crossfade_from_index)
+				var to_player: AudioStreamPlayer = _bgm_player_at(bgm_crossfade_to_index)
+				if from_player == null or to_player == null:
+					bgm_crossfade_active = false
+				else:
+					from_player.volume_db = lerpf(target_db, silent_db, t)
+					to_player.volume_db = lerpf(silent_db, target_db, t)
+					if t >= 1.0:
+						if from_player.playing:
+							from_player.stop()
+						from_player.volume_db = silent_db
+						bgm_active_player_index = bgm_crossfade_to_index
+						bgm_crossfade_active = false
+						bgm_crossfade_timer = 0.0
+			else:
+				active_player.volume_db = lerpf(active_player.volume_db, target_db, clampf(delta * BGM_VOLUME_SMOOTH, 0.0, 1.0))
+
+	# Keep low-health layer running in sync with gameplay music and blend its volume by health state.
+	if bgm_low_layer_player == null:
+		return
+	var low_target_db: float = silent_db
+	if gameplay_mode and bgm_game_low_health_stream != null:
+		if bgm_low_layer_player.stream != bgm_game_low_health_stream:
+			bgm_low_layer_player.stream = bgm_game_low_health_stream
+		var ref_player: AudioStreamPlayer = active_player
+		if bgm_crossfade_active:
+			var to_player_ref: AudioStreamPlayer = _bgm_player_at(bgm_crossfade_to_index)
+			if to_player_ref != null and ref_player != null and to_player_ref.volume_db > ref_player.volume_db:
+				ref_player = to_player_ref
+		var desired_pos: float = ref_player.get_playback_position() if ref_player != null else 0.0
+		if not bgm_low_layer_player.playing:
+			bgm_low_layer_player.play(desired_pos)
+		else:
+			var drift: float = absf(desired_pos - bgm_low_layer_player.get_playback_position())
+			var low_len: float = bgm_low_layer_player.stream.get_length() if bgm_low_layer_player.stream != null else 0.0
+			if low_len > 0.01:
+				drift = minf(drift, absf(low_len - drift))
+			if drift > BGM_LOW_LAYER_SYNC_TOLERANCE:
+				bgm_low_layer_player.play(desired_pos)
+		low_target_db = lerpf(BGM_SILENT_DB, BGM_GAME_LOW_LAYER_VOLUME_DB, bgm_low_layer_mix) + music_db
+	else:
+		if bgm_low_layer_player.playing and bgm_low_layer_mix <= 0.002:
+			bgm_low_layer_player.stop()
+	bgm_low_layer_player.volume_db = lerpf(
+		bgm_low_layer_player.volume_db,
+		low_target_db,
+		clampf(delta * BGM_VOLUME_SMOOTH, 0.0, 1.0)
+	)
 
 func _setup_audio_sfx() -> void:
 	if not ENABLE_SFX and not PERFECT_POSITION_SOUND_ENABLED:
@@ -1984,23 +3024,93 @@ func _setup_audio_sfx() -> void:
 	sfx_player.play()
 	sfx_playback = sfx_player.get_stream_playback() as AudioStreamGeneratorPlayback
 
+	if PERFECT_POSITION_SOUND_ENABLED:
+		perfect_position_stream = load(PERFECT_POSITION_SFX_PATH) as AudioStream
+		if perfect_position_stream != null:
+			perfect_position_player = AudioStreamPlayer.new()
+			perfect_position_player.name = "PerfectPositionSFXPlayer"
+			perfect_position_player.volume_db = PERFECT_POSITION_SFX_VOLUME_DB
+			perfect_position_player.bus = "Master"
+			perfect_position_player.stream = perfect_position_stream
+			add_child(perfect_position_player)
+		perfect_position_break_stream = load(PERFECT_POSITION_BREAK_SFX_PATH) as AudioStream
+		if perfect_position_break_stream != null:
+			perfect_position_break_player = AudioStreamPlayer.new()
+			perfect_position_break_player.name = "PerfectPositionBreakSFXPlayer"
+			perfect_position_break_player.volume_db = PERFECT_POSITION_BREAK_SFX_VOLUME_DB
+			perfect_position_break_player.bus = "Master"
+			perfect_position_break_player.stream = perfect_position_break_stream
+			add_child(perfect_position_break_player)
+
 func _setup_ui_sfx() -> void:
 	ui_click_stream = load(UI_CLICK_SFX_PATH) as AudioStream
-	ui_start_confirm_stream = load(UI_START_CONFIRM_SFX_PATH) as AudioStream
+	ui_character_select_stream = load(UI_CHARACTER_SELECT_SFX_PATH) as AudioStream
+	ui_start_game_stream = load(UI_START_GAME_SFX_PATH) as AudioStream
+	ui_final_boss_appear_stream = load(UI_FINAL_BOSS_APPEAR_SFX_PATH) as AudioStream
 
 	ui_click_player = AudioStreamPlayer.new()
 	ui_click_player.name = "UIClickSFXPlayer"
 	ui_click_player.volume_db = UI_CLICK_SFX_VOLUME_DB
 	ui_click_player.bus = "Master"
+	ui_click_player.max_polyphony = UI_CLICK_SFX_MAX_POLYPHONY
 	ui_click_player.stream = ui_click_stream
 	add_child(ui_click_player)
 
-	ui_start_confirm_player = AudioStreamPlayer.new()
-	ui_start_confirm_player.name = "UIStartConfirmSFXPlayer"
-	ui_start_confirm_player.volume_db = UI_START_CONFIRM_SFX_VOLUME_DB
-	ui_start_confirm_player.bus = "Master"
-	ui_start_confirm_player.stream = ui_start_confirm_stream
-	add_child(ui_start_confirm_player)
+	ui_character_select_player = AudioStreamPlayer.new()
+	ui_character_select_player.name = "UICharacterSelectSFXPlayer"
+	ui_character_select_player.volume_db = UI_CHARACTER_SELECT_SFX_VOLUME_DB
+	ui_character_select_player.bus = "Master"
+	ui_character_select_player.max_polyphony = UI_SELECT_SFX_MAX_POLYPHONY
+	ui_character_select_player.stream = ui_character_select_stream
+	add_child(ui_character_select_player)
+
+	ui_start_game_player = AudioStreamPlayer.new()
+	ui_start_game_player.name = "UIStartGameSFXPlayer"
+	ui_start_game_player.volume_db = UI_START_GAME_SFX_VOLUME_DB
+	ui_start_game_player.bus = "Master"
+	ui_start_game_player.max_polyphony = UI_SELECT_SFX_MAX_POLYPHONY
+	ui_start_game_player.stream = ui_start_game_stream
+	add_child(ui_start_game_player)
+
+	ui_final_boss_appear_player = AudioStreamPlayer.new()
+	ui_final_boss_appear_player.name = "UIFinalBossAppearSFXPlayer"
+	ui_final_boss_appear_player.volume_db = UI_FINAL_BOSS_APPEAR_SFX_VOLUME_DB
+	ui_final_boss_appear_player.bus = "Master"
+	ui_final_boss_appear_player.stream = ui_final_boss_appear_stream
+	add_child(ui_final_boss_appear_player)
+
+func _volume_percent_to_db_offset(percent: float) -> float:
+	var p: float = clampf(percent, 0.0, 100.0)
+	if p <= 0.0001:
+		return -80.0
+	return linear_to_db(p / 100.0)
+
+func _music_mix_db() -> float:
+	return _volume_percent_to_db_offset(music_volume_percent)
+
+func _sfx_mix_db() -> float:
+	return _volume_percent_to_db_offset(sfx_volume_percent)
+
+func _apply_audio_mix_levels() -> void:
+	var sfx_db: float = _sfx_mix_db()
+	var music_db: float = _music_mix_db()
+	if sfx_player != null:
+		sfx_player.volume_db = -6.0 + sfx_db
+	if ui_click_player != null:
+		ui_click_player.volume_db = UI_CLICK_SFX_VOLUME_DB + sfx_db
+	if ui_character_select_player != null:
+		ui_character_select_player.volume_db = UI_CHARACTER_SELECT_SFX_VOLUME_DB + sfx_db
+	if ui_start_game_player != null:
+		ui_start_game_player.volume_db = UI_START_GAME_SFX_VOLUME_DB + sfx_db
+	if ui_final_boss_appear_player != null:
+		ui_final_boss_appear_player.volume_db = UI_FINAL_BOSS_APPEAR_SFX_VOLUME_DB + sfx_db
+	if perfect_position_player != null:
+		perfect_position_player.volume_db = PERFECT_POSITION_SFX_VOLUME_DB + sfx_db
+	if perfect_position_break_player != null:
+		perfect_position_break_player.volume_db = PERFECT_POSITION_BREAK_SFX_VOLUME_DB + sfx_db
+	if bgm_low_layer_player != null:
+		var low_target_db: float = lerpf(BGM_SILENT_DB, BGM_GAME_LOW_LAYER_VOLUME_DB, bgm_low_layer_mix) + music_db
+		bgm_low_layer_player.volume_db = low_target_db
 
 func _play_ui_click_sfx() -> void:
 	if ui_click_player == null or ui_click_stream == null:
@@ -2008,11 +3118,23 @@ func _play_ui_click_sfx() -> void:
 	ui_click_player.pitch_scale = randf_range(0.98, 1.02)
 	ui_click_player.play()
 
-func _play_ui_start_confirm_sfx() -> void:
-	if ui_start_confirm_player == null or ui_start_confirm_stream == null:
+func _play_ui_character_select_sfx() -> void:
+	if ui_character_select_player == null or ui_character_select_stream == null:
 		return
-	ui_start_confirm_player.pitch_scale = 1.0
-	ui_start_confirm_player.play()
+	ui_character_select_player.pitch_scale = 1.0
+	ui_character_select_player.play()
+
+func _play_ui_start_game_sfx() -> void:
+	if ui_start_game_player == null or ui_start_game_stream == null:
+		return
+	ui_start_game_player.pitch_scale = 1.0
+	ui_start_game_player.play()
+
+func _play_ui_final_boss_appear_sfx() -> void:
+	if ui_final_boss_appear_player == null or ui_final_boss_appear_stream == null:
+		return
+	ui_final_boss_appear_player.pitch_scale = 1.0
+	ui_final_boss_appear_player.play()
 
 func _play_hit_sfx(enemy_hit: bool, intensity: float) -> void:
 	if not ENABLE_SFX:
@@ -2038,6 +3160,10 @@ func _play_switch_sfx() -> void:
 func _play_perfect_position_sfx() -> void:
 	if not PERFECT_POSITION_SOUND_ENABLED:
 		return
+	if perfect_position_player != null and perfect_position_stream != null:
+		perfect_position_player.pitch_scale = randf_range(0.985, 1.015)
+		perfect_position_player.play()
+		return
 	if sfx_player != null and not sfx_player.playing:
 		sfx_player.play()
 		sfx_playback = sfx_player.get_stream_playback() as AudioStreamGeneratorPlayback
@@ -2045,6 +3171,14 @@ func _play_perfect_position_sfx() -> void:
 		return
 	_push_sfx_tone(368.0, 0.11, 0.24, true)
 	_push_sfx_tone(548.0, 0.085, 0.16, true)
+
+func _play_perfect_position_break_sfx() -> void:
+	if not PERFECT_POSITION_SOUND_ENABLED:
+		return
+	if perfect_position_break_player != null and perfect_position_break_stream != null:
+		perfect_position_break_player.pitch_scale = randf_range(0.985, 1.015)
+		perfect_position_break_player.play()
+		return
 
 func _push_sfx_tone(freq: float, duration: float, amp: float, allow_when_sfx_disabled: bool = false) -> void:
 	if not ENABLE_SFX and not allow_when_sfx_disabled:
@@ -2236,10 +3370,10 @@ func _apply_upgrade(upgrade_id: int) -> void:
 		UPGRADE_ROGUE_TWIN_FANGS:
 			for hero: Hero in heroes:
 				if hero.kind == HERO_ROGUE:
-					hero.rogue_dual_strike_unlocked = true
-					hero.attack_damage += 1.7
-					hero.attack_cooldown = maxf(0.18, hero.attack_cooldown * 0.93)
-					hero.rogue_halo_damage_bonus_mult += 0.05
+					hero.rogue_zip_unlocked = true
+					hero.rogue_zip_skill_cooldown_reduction += 0.25
+					hero.attack_damage += 1.2
+					hero.attack_cooldown = maxf(0.18, hero.attack_cooldown * 0.95)
 		UPGRADE_TANK_HEAVY_ATTACK:
 			for hero: Hero in heroes:
 				if hero.kind == HERO_KNIGHT:
@@ -2264,10 +3398,12 @@ func _apply_upgrade(upgrade_id: int) -> void:
 				_ensure_spectral_halo_slots()
 		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
 			for hero: Hero in heroes:
-				if hero.kind == HERO_ROGUE and hero.rogue_dual_strike_unlocked:
-					hero.attack_damage += 1.9
-					hero.attack_cooldown = maxf(0.16, hero.attack_cooldown * 0.9)
-					hero.rogue_halo_damage_bonus_mult += 0.08
+				if hero.kind == HERO_ROGUE and hero.rogue_zip_unlocked:
+					hero.rogue_zip_bonus_hops += 1
+					hero.rogue_zip_damage_bonus_mult += 0.16
+					hero.rogue_zip_skill_cooldown_reduction += 0.45
+					hero.attack_damage += 0.8
+					hero.attack_cooldown = maxf(0.16, hero.attack_cooldown * 0.95)
 		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
 			for hero: Hero in heroes:
 				if hero.kind == HERO_KNIGHT and hero.tank_heavy_attack_unlocked:
@@ -2308,7 +3444,7 @@ func _upgrade_name(upgrade_id: int) -> String:
 		UPGRADE_GOLDEN_SURGE:
 			return "Golden Surge"
 		UPGRADE_ROGUE_TWIN_FANGS:
-			return "Twin Fangs"
+			return "Shadow Zip"
 		UPGRADE_TANK_HEAVY_ATTACK:
 			return "Heavy Attack"
 		UPGRADE_RANGER_TRIPLE_ARROWS:
@@ -2318,7 +3454,7 @@ func _upgrade_name(upgrade_id: int) -> String:
 		UPGRADE_HALO_ECHO:
 			return "+1 Halo"
 		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
-			return "Twin Fangs+"
+			return "Shadow Zip+"
 		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
 			return "Heavy Attack+"
 		UPGRADE_RANGER_TRIPLE_ARROWS_PLUS:
@@ -2350,7 +3486,7 @@ func _upgrade_description(upgrade_id: int) -> String:
 		UPGRADE_GOLDEN_SURGE:
 			return "Boss reward: major all-around power spike this run."
 		UPGRADE_ROGUE_TWIN_FANGS:
-			return "Unlock Twin Fangs: two side slashes plus a finishing stab each attack."
+			return "Unlock Rogue Shadow Zip: chain dash hits, return to formation, then wait for cooldown."
 		UPGRADE_TANK_HEAVY_ATTACK:
 			return "Unlock Tank charged slam: huge area strike that punishes swarms."
 		UPGRADE_RANGER_TRIPLE_ARROWS:
@@ -2360,7 +3496,7 @@ func _upgrade_description(upgrade_id: int) -> String:
 		UPGRADE_HALO_ECHO:
 			return "Add another bouncing halo (up to %d total)." % [SPECTRAL_HALO_MAX_COUNT]
 		UPGRADE_ROGUE_TWIN_FANGS_PLUS:
-			return "Twin Fangs upgrade: stronger slash chain and faster rogue attack cadence."
+			return "Shadow Zip upgrade: +1 chain hit, more zip damage, and shorter zip cooldown."
 		UPGRADE_TANK_HEAVY_ATTACK_PLUS:
 			return "Heavy Attack upgrade: stronger slams, faster cadence, bonus tank HP."
 		UPGRADE_RANGER_TRIPLE_ARROWS_PLUS:
@@ -2421,6 +3557,10 @@ func _update_ui() -> void:
 		status_line = "Choose one upgrade to continue."
 	elif waiting_for_next_wave:
 		status_line = "Wave clear. Next wave in %.1fs." % [maxf(intermission_timer, 0.0)]
+	elif wave_surge_active:
+		status_line = "Enemy surge! Hold formation and push through."
+	elif wave_surge_recovery_timer > 0.0:
+		status_line = "Regroup window."
 	hint_label.text = status_line
 
 func _current_cycle_wave() -> int:
@@ -2457,7 +3597,7 @@ func _draw_world_backdrop(view_rect: Rect2) -> void:
 	_draw_atmospheric_lighting(view_rect)
 
 func _draw_start_menu_backdrop(view_rect: Rect2) -> void:
-	draw_rect(view_rect, Color(0.015, 0.03, 0.065, 1.0), true)
+	draw_rect(view_rect, Color(0.01, 0.022, 0.05, 1.0), true)
 
 	# Vertical tone bands for a dedicated menu look (separate from the arena floor).
 	var band_count: int = 16
@@ -2467,63 +3607,106 @@ func _draw_start_menu_backdrop(view_rect: Rect2) -> void:
 		var y0: float = lerpf(view_rect.position.y, view_rect.end.y, t0)
 		var y1: float = lerpf(view_rect.position.y, view_rect.end.y, t1)
 		var band_rect: Rect2 = Rect2(Vector2(view_rect.position.x, y0), Vector2(view_rect.size.x, y1 - y0))
-		var top_col: Color = Color(0.02, 0.07, 0.13, 0.6)
-		var bot_col: Color = Color(0.01, 0.02, 0.05, 0.74)
+		var top_col: Color = Color(0.015, 0.055, 0.1, 0.64)
+		var bot_col: Color = Color(0.008, 0.016, 0.04, 0.78)
 		draw_rect(band_rect, top_col.lerp(bot_col, t0), true)
 
-	# Three square stained-glass windows aligned behind the three hero cards.
-	var glass_colors: Array[Color] = [
-		Color(0.24, 0.7, 0.98, 0.5),
-		Color(0.94, 0.46, 0.78, 0.48),
-		Color(0.39, 0.88, 0.74, 0.48),
-		Color(0.94, 0.74, 0.32, 0.46)
-	]
-	for i in range(3):
-		var slot_world: Rect2 = _screen_rect_to_world(_starting_hero_slot_rect(i))
-		var window_w: float = slot_world.size.x * 0.34
-		var window_h: float = slot_world.size.y * 1.02
-		var window_x: float = slot_world.position.x + (slot_world.size.x - window_w) * 0.5
-		var window_y: float = slot_world.position.y - window_h * 0.84
-		var frame_color: Color = Color(0.16, 0.21, 0.31, 0.82)
-		var lead_color: Color = Color(0.82, 0.9, 1.0, 0.3)
+	# Menu backdrop: only top wall + floor (edge to edge), no side/bottom wall strips.
+	var menu_top_h: float = minf(WALL_TOP_BLOCK, view_rect.size.y * 0.3)
+	draw_rect(Rect2(view_rect.position, Vector2(view_rect.size.x, menu_top_h)), Color(0.46, 0.46, 0.54, 0.84), true)
 
-		var outer_rect: Rect2 = Rect2(Vector2(window_x, window_y), Vector2(window_w, window_h))
-		draw_rect(outer_rect, frame_color, true)
-		var inner_rect: Rect2 = outer_rect.grow(-7.0)
-		draw_rect(inner_rect, Color(0.09, 0.14, 0.2, 0.62), true)
+	var menu_window_segments: Array[Vector2] = []
+	if wall_top_windows_texture != null and wall_top_windows_texture.get_width() > 0 and wall_top_windows_texture.get_height() > 0:
+		var src_w: float = float(wall_top_windows_texture.get_width())
+		var src_h: float = float(wall_top_windows_texture.get_height())
+		for i in range(3):
+			var slot_world: Rect2 = _screen_rect_to_world(_starting_hero_slot_rect(i))
+			var win_h: float = menu_top_h * 0.95
+			var win_w: float = maxf(70.0, win_h * (src_w / maxf(src_h, 0.0001)))
+			var win_x: float = slot_world.get_center().x - win_w * 0.5
+			var win_rect: Rect2 = Rect2(Vector2(win_x, view_rect.position.y + 4.0), Vector2(win_w, win_h))
+			draw_texture_rect(wall_top_windows_texture, win_rect, false, Color(1.0, 1.0, 1.0, 0.98))
+			menu_window_segments.append(Vector2(win_rect.get_center().x, win_rect.size.x))
 
-		var cols: int = 3
-		var rows: int = 2
-		var pane_gap: float = 2.0
-		var pane_w: float = (inner_rect.size.x - pane_gap * float(cols - 1)) / float(cols)
-		var pane_h: float = (inner_rect.size.y - pane_gap * float(rows - 1)) / float(rows)
-		for row in range(rows):
-			for col in range(cols):
-				var px: float = inner_rect.position.x + float(col) * (pane_w + pane_gap)
-				var py: float = inner_rect.position.y + float(row) * (pane_h + pane_gap)
-				var pane: Rect2 = Rect2(Vector2(px, py), Vector2(pane_w, pane_h))
-				var c_idx: int = (i + row + col) % glass_colors.size()
-				draw_rect(pane, glass_colors[c_idx], true)
-				draw_rect(pane.grow(-1.2), Color(0.9, 0.95, 1.0, 0.08), true)
-
-		for col in range(1, cols):
-			var lx: float = inner_rect.position.x + float(col) * (pane_w + pane_gap) - pane_gap * 0.5
-			draw_line(Vector2(lx, inner_rect.position.y), Vector2(lx, inner_rect.end.y), lead_color, 1.4)
-		for row in range(1, rows):
-			var ly: float = inner_rect.position.y + float(row) * (pane_h + pane_gap) - pane_gap * 0.5
-			draw_line(Vector2(inner_rect.position.x, ly), Vector2(inner_rect.end.x, ly), lead_color, 1.4)
+	for seg in menu_window_segments:
+		var sx: float = seg.x
+		var seg_w: float = seg.y
+		var shaft_top: float = view_rect.position.y + menu_top_h - 16.0
+		var shaft_far_w: float = clampf(seg_w * 0.42, 46.0, 90.0)
+		var shaft_core_w: float = shaft_far_w * 0.72
+		if window_light_texture != null:
+			var shaft_rect_far: Rect2 = Rect2(Vector2(sx - shaft_far_w * 0.5, shaft_top), Vector2(shaft_far_w, 340.0))
+			draw_texture_rect(window_light_texture, shaft_rect_far, false, Color(1.0, 1.0, 1.0, 0.31))
+			var shaft_rect_core: Rect2 = Rect2(Vector2(sx - shaft_core_w * 0.5, shaft_top + 10.0), Vector2(shaft_core_w, 304.0))
+			draw_texture_rect(window_light_texture, shaft_rect_core, false, Color(1.0, 1.0, 1.0, 0.37))
+		if floor_light_texture != null:
+			var floor_w: float = clampf(seg_w * 0.74, 102.0, 160.0)
+			var floor_rect: Rect2 = Rect2(Vector2(sx - floor_w * 0.5, shaft_top + 164.0), Vector2(floor_w, 286.0))
+			draw_texture_rect(floor_light_texture, floor_rect, false, Color(1.0, 1.0, 1.0, 0.37))
 
 	# Subtle rectangular stage wash behind cards.
 	var stage_rect: Rect2 = Rect2(
 		Vector2(view_rect.position.x + view_rect.size.x * 0.1, view_rect.position.y + view_rect.size.y * 0.26),
 		Vector2(view_rect.size.x * 0.8, view_rect.size.y * 0.44)
 	)
-	draw_rect(stage_rect, Color(0.12, 0.24, 0.38, 0.07), true)
-	draw_rect(stage_rect.grow(-36.0), Color(0.1, 0.21, 0.34, 0.04), true)
+	draw_rect(stage_rect, Color(0.08, 0.18, 0.29, 0.06), true)
+	draw_rect(stage_rect.grow(-36.0), Color(0.06, 0.15, 0.25, 0.035), true)
+	draw_rect(view_rect, Color(0.0, 0.0, 0.0, 0.06), true)
 
-	# Subtle framing ornaments.
-	draw_rect(view_rect.grow(-24.0), Color(0.78, 0.88, 1.0, 0.1), false, 2.0)
-	draw_rect(view_rect.grow(-44.0), Color(0.56, 0.74, 1.0, 0.07), false, 1.6)
+	# No border frame here so top wall/floor read edge-to-edge.
+
+func _draw_options_overlay(view_rect: Rect2, title_font: Font, body_font: Font) -> void:
+	draw_rect(view_rect, Color(0.0, 0.0, 0.0, 0.52), true)
+	var panel_screen: Rect2 = _options_panel_rect_screen()
+	var panel: Rect2 = _screen_rect_to_world(panel_screen)
+	draw_rect(panel, Color(0.03, 0.06, 0.1, 0.88), true)
+	draw_rect(panel.grow(-6.0), Color(0.01, 0.03, 0.06, 0.64), true)
+	draw_rect(panel, Color(0.9, 0.95, 1.0, 0.42), false, 2.2)
+
+	var title: String = "OPTIONS"
+	var title_size: int = _fit_font_size_for_text(title_font, title, panel.size.x - 40.0, 46, 24)
+	var title_y: float = panel.position.y + 58.0
+	draw_string(title_font, Vector2(panel.position.x + 3.0, title_y + 4.0), title, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, title_size, Color(0.0, 0.0, 0.0, 0.76))
+	draw_string(title_font, Vector2(panel.position.x, title_y), title, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, title_size, Color(0.95, 0.85, 0.62, 0.98))
+
+	var music_slider_screen: Rect2 = _options_music_slider_rect_screen()
+	var sfx_slider_screen: Rect2 = _options_sfx_slider_rect_screen()
+	var music_slider: Rect2 = _screen_rect_to_world(music_slider_screen)
+	var sfx_slider: Rect2 = _screen_rect_to_world(sfx_slider_screen)
+	var label_size: int = 20
+	var value_size: int = 18
+
+	draw_string(body_font, Vector2(panel.position.x + 68.0, music_slider.position.y - 14.0), "Main Volume", HORIZONTAL_ALIGNMENT_LEFT, 240.0, label_size, Color(0.92, 0.96, 1.0, 0.97))
+	draw_string(body_font, Vector2(panel.position.x + panel.size.x - 132.0, music_slider.position.y - 14.0), "%d%%" % [int(round(music_volume_percent))], HORIZONTAL_ALIGNMENT_RIGHT, 80.0, value_size, Color(0.82, 0.94, 1.0, 0.94))
+	draw_string(body_font, Vector2(panel.position.x + 68.0, sfx_slider.position.y - 14.0), "SFX Volume", HORIZONTAL_ALIGNMENT_LEFT, 240.0, label_size, Color(0.92, 0.96, 1.0, 0.97))
+	draw_string(body_font, Vector2(panel.position.x + panel.size.x - 132.0, sfx_slider.position.y - 14.0), "%d%%" % [int(round(sfx_volume_percent))], HORIZONTAL_ALIGNMENT_RIGHT, 80.0, value_size, Color(0.82, 0.94, 1.0, 0.94))
+
+	for data in [
+		{"rect": music_slider, "value": music_volume_percent},
+		{"rect": sfx_slider, "value": sfx_volume_percent}
+	]:
+		var slider_rect: Rect2 = data["rect"]
+		var value: float = float(data["value"])
+		draw_rect(slider_rect, Color(0.09, 0.13, 0.2, 0.96), true)
+		draw_rect(slider_rect, Color(0.9, 0.95, 1.0, 0.5), false, 1.6)
+		var fill_w: float = slider_rect.size.x * clampf(value / 100.0, 0.0, 1.0)
+		draw_rect(Rect2(slider_rect.position, Vector2(fill_w, slider_rect.size.y)), Color(0.38, 0.74, 1.0, 0.9), true)
+		var knob_x: float = slider_rect.position.x + fill_w
+		var knob_center: Vector2 = Vector2(knob_x, slider_rect.get_center().y)
+		draw_circle(knob_center, 10.0, Color(0.96, 0.99, 1.0, 0.96))
+		draw_circle(knob_center, 5.8, Color(0.44, 0.78, 1.0, 0.95))
+
+	var close_screen: Rect2 = _options_close_button_rect_screen()
+	var close_rect: Rect2 = _screen_rect_to_world(close_screen)
+	var hover_screen: Vector2 = get_viewport().get_mouse_position()
+	var close_hover: bool = close_screen.has_point(hover_screen)
+	draw_rect(close_rect, Color(0.15, 0.22, 0.33, 0.96) if not close_hover else Color(0.23, 0.31, 0.45, 0.98), true)
+	draw_rect(close_rect, Color(0.9, 0.95, 1.0, 0.82), false, 2.0)
+	var close_label: String = "CLOSE"
+	var close_size: int = _fit_font_size_for_text(body_font, close_label, close_rect.size.x - 16.0, 24, 15)
+	var close_base_y: float = _centered_text_baseline(close_rect, body_font, close_size)
+	draw_string(body_font, Vector2(close_rect.position.x + 2.0, close_base_y + 2.0), close_label, HORIZONTAL_ALIGNMENT_CENTER, close_rect.size.x, close_size, Color(0.0, 0.0, 0.0, 0.62))
+	draw_string(body_font, Vector2(close_rect.position.x, close_base_y), close_label, HORIZONTAL_ALIGNMENT_CENTER, close_rect.size.x, close_size, Color(0.96, 0.99, 1.0, 0.98))
 
 func _draw_readability_pass() -> void:
 	if low_spec_mode:
@@ -2613,39 +3796,40 @@ func _draw_floor_pattern(view_rect: Rect2) -> void:
 	if visible.size.x <= 0.0 or visible.size.y <= 0.0:
 		return
 
-	if floor_texture != null:
-		var tex_w: float = float(floor_texture.get_width())
-		var tex_h: float = float(floor_texture.get_height())
-		if tex_w > 0.0 and tex_h > 0.0:
-			# Hybrid floor:
-			# 1) repeat a non-center pattern tile across arena
-			# 2) place one centered medallion texture in the middle
-			draw_rect(arena_rect, Color(0.06, 0.1, 0.14, 0.95), true)
+	if floor_main_texture != null:
+		var main_w: float = float(floor_main_texture.get_width())
+		var main_h: float = float(floor_main_texture.get_height())
+		if main_w > 0.0 and main_h > 0.0:
+			draw_rect(arena_rect, Color(0.05, 0.08, 0.12, 0.95), true)
+			var tile_size: Vector2 = Vector2(main_w, main_h)
+			if tile_size.x <= 0.0 or tile_size.y <= 0.0:
+				tile_size = Vector2(FLOOR_TEXTURE_TILE_WORLD_SIZE, FLOOR_TEXTURE_TILE_WORLD_SIZE)
 
-			var src_tile_w: float = maxf(16.0, tex_w * FLOOR_TEXTURE_REPEAT_SRC_FRACTION)
-			var src_tile_h: float = maxf(16.0, tex_h * FLOOR_TEXTURE_REPEAT_SRC_FRACTION)
-			var src_tile_rect: Rect2 = Rect2(
-				Vector2(FLOOR_TEXTURE_REPEAT_SRC_INSET, FLOOR_TEXTURE_REPEAT_SRC_INSET),
-				Vector2(src_tile_w, src_tile_h)
-			)
-			var tile_size: float = FLOOR_TEXTURE_TILE_WORLD_SIZE
-			# Anchor repeat grid at arena center so outer pattern lines up with centered medallion.
+			# Anchor repeat grid at arena center to keep pattern alignment stable.
 			var grid_anchor: Vector2 = arena_rect.get_center()
-			var start_x: float = floor((visible.position.x - grid_anchor.x) / tile_size) * tile_size + grid_anchor.x
-			var start_y: float = floor((visible.position.y - grid_anchor.y) / tile_size) * tile_size + grid_anchor.y
-			var end_x: float = minf(visible.end.x + tile_size, arena_rect.end.x + tile_size)
-			var end_y: float = minf(visible.end.y + tile_size, arena_rect.end.y + tile_size)
-			for y in range(int(start_y), int(end_y), int(tile_size)):
-				for x in range(int(start_x), int(end_x), int(tile_size)):
-					var tile_rect: Rect2 = Rect2(Vector2(float(x), float(y)), Vector2(tile_size, tile_size))
-					draw_texture_rect_region(floor_texture, tile_rect, src_tile_rect, Color(0.74, 0.84, 0.96, 0.78), false, true)
+			var start_x: float = floor((visible.position.x - grid_anchor.x) / tile_size.x) * tile_size.x + grid_anchor.x
+			var start_y: float = floor((visible.position.y - grid_anchor.y) / tile_size.y) * tile_size.y + grid_anchor.y
+			var end_x: float = minf(visible.end.x + tile_size.x, arena_rect.end.x + tile_size.x)
+			var end_y: float = minf(visible.end.y + tile_size.y, arena_rect.end.y + tile_size.y)
 
-			var src_rect_full: Rect2 = Rect2(Vector2.ZERO, Vector2(tex_w, tex_h))
-			var center_size: Vector2 = Vector2(FLOOR_TEXTURE_CENTER_WORLD_SIZE, FLOOR_TEXTURE_CENTER_WORLD_SIZE)
-			var center_rect: Rect2 = Rect2(arena_rect.get_center() - center_size * 0.5, center_size)
-			draw_texture_rect_region(floor_texture, center_rect, src_rect_full, Color(0.9, 0.96, 1.0, FLOOR_TEXTURE_CENTER_ALPHA), false, true)
+			var y: float = start_y
+			while y < end_y:
+				var x: float = start_x
+				while x < end_x:
+					var tile_rect: Rect2 = Rect2(Vector2(x, y), tile_size)
+					draw_texture_rect(floor_main_texture, tile_rect, false, Color(1.0, 1.0, 1.0, FLOOR_TEXTURE_MAIN_ALPHA))
+					x += tile_size.x
+				y += tile_size.y
 
-			draw_rect(arena_rect, Color(0.02, 0.04, 0.07, 0.14), true)
+			if floor_middle_texture != null:
+				var center_w: float = float(floor_middle_texture.get_width())
+				var center_h: float = float(floor_middle_texture.get_height())
+				if center_w > 0.0 and center_h > 0.0:
+					var center_size: Vector2 = Vector2(center_w, center_h)
+					var center_rect: Rect2 = Rect2(arena_rect.get_center() - center_size * 0.5, center_size)
+					draw_texture_rect(floor_middle_texture, center_rect, false, Color(1.0, 1.0, 1.0, FLOOR_TEXTURE_CENTER_ALPHA))
+
+			draw_rect(arena_rect, Color(0.02, 0.04, 0.07, 0.11), true)
 			return
 
 	_draw_floor_pattern_fallback(visible)
@@ -2687,37 +3871,93 @@ func _draw_boundary_walls() -> void:
 	var bottom_y: float = arena_rect.end.y
 	var left_x: float = arena_rect.position.x
 	var right_x: float = arena_rect.end.x
-	var wall_w: float = 54.0
-	var top_wall: Rect2 = Rect2(Vector2(left_x, top_y), Vector2(arena_rect.size.x, wall_w))
-	var bottom_wall: Rect2 = Rect2(Vector2(left_x, bottom_y - wall_w), Vector2(arena_rect.size.x, wall_w))
-	var left_wall: Rect2 = Rect2(Vector2(left_x, top_y), Vector2(wall_w, arena_rect.size.y))
-	var right_wall: Rect2 = Rect2(Vector2(right_x - wall_w, top_y), Vector2(wall_w, arena_rect.size.y))
+	var top_wall_h: float = WALL_TOP_BLOCK
+	var side_wall_w: float = WALL_SIDE_BLOCK
+	var bottom_wall_h: float = WALL_BOTTOM_BLOCK
+	var top_wall: Rect2 = Rect2(Vector2(left_x, top_y), Vector2(arena_rect.size.x, top_wall_h))
+	var bottom_wall: Rect2 = Rect2(Vector2(left_x, bottom_y - bottom_wall_h), Vector2(arena_rect.size.x, bottom_wall_h))
+	var left_wall: Rect2 = Rect2(Vector2(left_x, top_y), Vector2(side_wall_w, arena_rect.size.y))
+	var right_wall: Rect2 = Rect2(Vector2(right_x - side_wall_w, top_y), Vector2(side_wall_w, arena_rect.size.y))
 
-	# Solid in-arena walls so boundaries are always obvious.
-	draw_rect(top_wall, Color(0.08, 0.11, 0.16, 0.92), true)
-	draw_rect(bottom_wall, Color(0.08, 0.11, 0.16, 0.92), true)
-	draw_rect(left_wall, Color(0.08, 0.11, 0.16, 0.92), true)
-	draw_rect(right_wall, Color(0.08, 0.11, 0.16, 0.92), true)
+	# Base wall fill so bounds are always visible.
+	draw_rect(top_wall, Color(0.62, 0.6, 0.66, 0.98), true)
+	draw_rect(bottom_wall, Color(0.44, 0.39, 0.46, 0.96), true)
+	draw_rect(left_wall, Color(0.44, 0.39, 0.46, 0.96), true)
+	draw_rect(right_wall, Color(0.44, 0.39, 0.46, 0.96), true)
 
-	# Decorative trims.
-	draw_line(Vector2(left_x, top_y + wall_w), Vector2(right_x, top_y + wall_w), Color(0.72, 0.86, 1.0, 0.52), 2.4)
-	draw_line(Vector2(left_x, bottom_y - wall_w), Vector2(right_x, bottom_y - wall_w), Color(0.72, 0.86, 1.0, 0.52), 2.4)
-	draw_line(Vector2(left_x + wall_w, top_y), Vector2(left_x + wall_w, bottom_y), Color(0.72, 0.86, 1.0, 0.46), 2.2)
-	draw_line(Vector2(right_x - wall_w, top_y), Vector2(right_x - wall_w, bottom_y), Color(0.72, 0.86, 1.0, 0.46), 2.2)
-	draw_rect(arena_rect, Color(0.62, 0.82, 1.0, 0.52), false, 2.2)
+	# Top wall windows: repeat the supplied top-window tile across the wall.
+	# Store center + segment width for per-window light/reflection stacks.
+	var window_segments: Array[Vector2] = []
+	if wall_top_windows_texture != null and wall_top_windows_texture.get_width() > 0 and wall_top_windows_texture.get_height() > 0:
+		var src_w: float = float(wall_top_windows_texture.get_width())
+		var src_h: float = float(wall_top_windows_texture.get_height())
+		var ideal_seg_w: float = maxf(72.0, src_w * (top_wall_h / src_h))
+		var seg_count: int = maxi(1, int(round(arena_rect.size.x / ideal_seg_w)))
+		var seg_w: float = arena_rect.size.x / float(seg_count)
+		for i in range(seg_count):
+			var x_seg: float = left_x + seg_w * float(i)
+			var seg_rect: Rect2 = Rect2(Vector2(x_seg, top_y), Vector2(seg_w, top_wall_h))
+			draw_texture_rect(wall_top_windows_texture, seg_rect, false, Color(1.0, 1.0, 1.0, 0.98))
+			window_segments.append(Vector2(x_seg + seg_w * 0.5, seg_w))
+	else:
+		var fallback_count: int = maxi(3, ATMOS_RAY_COUNT)
+		var fallback_w: float = arena_rect.size.x / float(fallback_count)
+		for i in range(fallback_count):
+			var sx: float = left_x + fallback_w * (float(i) + 0.5)
+			window_segments.append(Vector2(sx, fallback_w))
 
-	# Repeaters on side walls for structure.
-	for y in range(int(top_y) + 90, int(bottom_y) - 90, 180):
-		draw_rect(Rect2(Vector2(left_x + 8.0, float(y) - 20.0), Vector2(14.0, 40.0)), Color(0.36, 0.44, 0.56, 0.7), true)
-		draw_rect(Rect2(Vector2(right_x - 22.0, float(y) - 20.0), Vector2(14.0, 40.0)), Color(0.36, 0.44, 0.56, 0.7), true)
+	# Side vertical walls.
+	var side_start_y: float = top_y + top_wall_h
+	var side_end_y: float = bottom_y - bottom_wall_h
+	if wall_left_texture != null:
+		var seg_h: float = maxf(44.0, float(wall_left_texture.get_height()))
+		var y_left: float = side_start_y
+		while y_left < side_end_y:
+			var h_left: float = minf(seg_h, side_end_y - y_left)
+			draw_texture_rect(wall_left_texture, Rect2(Vector2(left_x, y_left), Vector2(side_wall_w, h_left)), false, Color(1.0, 1.0, 1.0, 0.9))
+			y_left += h_left
+	if wall_right_texture != null:
+		var seg_h_r: float = maxf(44.0, float(wall_right_texture.get_height()))
+		var y_right: float = side_start_y
+		while y_right < side_end_y:
+			var h_right: float = minf(seg_h_r, side_end_y - y_right)
+			draw_texture_rect(wall_right_texture, Rect2(Vector2(right_x - side_wall_w, y_right), Vector2(side_wall_w, h_right)), false, Color(1.0, 1.0, 1.0, 0.9))
+			y_right += h_right
 
-	# Aligned "windows"/fixtures that match the atmospheric light ray anchors.
-	for i in range(ATMOS_RAY_COUNT):
-		var t: float = (float(i) + 0.5) / float(ATMOS_RAY_COUNT)
-		var sx: float = lerpf(arena_rect.position.x + ATMOS_RAY_EDGE_INSET, arena_rect.end.x - ATMOS_RAY_EDGE_INSET, t)
-		draw_rect(Rect2(Vector2(sx - 24.0, top_y + 8.0), Vector2(48.0, 24.0)), Color(0.5, 0.63, 0.82, 0.66), true)
-		draw_rect(Rect2(Vector2(sx - 17.0, top_y + 14.0), Vector2(34.0, 10.0)), Color(0.74, 0.88, 1.0, 0.78), true)
-		draw_rect(Rect2(Vector2(sx - 20.0, bottom_y - wall_w + 10.0), Vector2(40.0, 14.0)), Color(0.36, 0.44, 0.56, 0.65), true)
+	# Bottom wall strip.
+	if wall_bottom_texture != null:
+		var bottom_seg_w: float = maxf(64.0, float(wall_bottom_texture.get_width()))
+		var x_bottom: float = left_x
+		while x_bottom < right_x:
+			var w_bottom: float = minf(bottom_seg_w, right_x - x_bottom)
+			draw_texture_rect(wall_bottom_texture, Rect2(Vector2(x_bottom, bottom_y - bottom_wall_h), Vector2(w_bottom, bottom_wall_h)), false, Color(1.0, 1.0, 1.0, 0.9))
+			x_bottom += w_bottom
+
+	# One reflection stack per repeated window segment.
+	for seg in window_segments:
+		var sx: float = seg.x
+		var seg_w: float = seg.y
+		var shaft_top: float = top_y + top_wall_h - 18.0
+		var shaft_far_w: float = clampf(seg_w * 0.44, 46.0, 90.0)
+		var shaft_core_w: float = shaft_far_w * 0.72
+		var shaft_far_h: float = 360.0
+		var shaft_core_h: float = 320.0
+		if window_light_texture != null:
+			var shaft_rect_far: Rect2 = Rect2(Vector2(sx - shaft_far_w * 0.5, shaft_top), Vector2(shaft_far_w, shaft_far_h))
+			draw_texture_rect(window_light_texture, shaft_rect_far, false, Color(1.0, 1.0, 1.0, 0.31))
+			var shaft_rect_core: Rect2 = Rect2(Vector2(sx - shaft_core_w * 0.5, shaft_top + 12.0), Vector2(shaft_core_w, shaft_core_h))
+			draw_texture_rect(window_light_texture, shaft_rect_core, false, Color(1.0, 1.0, 1.0, 0.38))
+		if floor_light_texture != null:
+			var floor_w: float = clampf(seg_w * 0.68, 90.0, 146.0)
+			var floor_h: float = 252.0
+			var floor_glow_rect: Rect2 = Rect2(Vector2(sx - floor_w * 0.5, shaft_top + 172.0), Vector2(floor_w, floor_h))
+			draw_texture_rect(floor_light_texture, floor_glow_rect, false, Color(1.0, 1.0, 1.0, 0.37))
+
+	# Framing trims.
+	draw_line(Vector2(left_x, top_y + top_wall_h), Vector2(right_x, top_y + top_wall_h), Color(0.82, 0.9, 1.0, 0.48), 2.0)
+	draw_line(Vector2(left_x + side_wall_w, top_y), Vector2(left_x + side_wall_w, bottom_y), Color(0.76, 0.86, 1.0, 0.34), 1.8)
+	draw_line(Vector2(right_x - side_wall_w, top_y), Vector2(right_x - side_wall_w, bottom_y), Color(0.76, 0.86, 1.0, 0.34), 1.8)
+	draw_rect(arena_rect, Color(0.62, 0.82, 1.0, 0.42), false, 2.0)
 
 func _draw_central_floor_emblem() -> void:
 	var c: Vector2 = arena_rect.get_center()
@@ -2751,17 +3991,47 @@ func _draw() -> void:
 		var card_font: Font = hero_status.get_theme_font("font")
 		if card_font == null:
 			card_font = ThemeDB.fallback_font
-		var title_font: Font = start_menu_title_font if start_menu_title_font != null else card_font
-		var title_size: int = 74 if start_menu_title_font != null else 46
-		var title_text: String = "Halo Keepers"
-		var title_y: float = view_rect.position.y + view_rect.size.y * 0.31
-		# Layered shadow passes to separate title from the busy backdrop.
-		draw_string(title_font, Vector2(view_rect.position.x + 6.0, title_y + 8.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.62))
-		draw_string(title_font, Vector2(view_rect.position.x + 3.0, title_y + 5.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.78))
-		draw_string(title_font, Vector2(view_rect.position.x + 1.0, title_y + 2.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.52))
-		draw_string(title_font, Vector2(view_rect.position.x, title_y), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.95, 0.83, 0.58, 0.98))
+		if start_screen_title_logo != null:
+			var logo_size: Vector2 = Vector2(float(start_screen_title_logo.get_width()), float(start_screen_title_logo.get_height()))
+			if logo_size.x > 0.0 and logo_size.y > 0.0:
+				var max_w: float = view_rect.size.x * 0.72
+				var max_h: float = view_rect.size.y * 0.26
+				var fit_scale: float = minf(max_w / logo_size.x, max_h / logo_size.y)
+				fit_scale = clampf(fit_scale, 0.25, 3.0)
+				var draw_size: Vector2 = logo_size * fit_scale
+				var logo_rect: Rect2 = Rect2(
+					Vector2(view_rect.get_center().x - draw_size.x * 0.5, view_rect.position.y + view_rect.size.y * 0.18),
+					draw_size
+				)
+				var shadow_rect_far: Rect2 = logo_rect
+				shadow_rect_far.position += Vector2(8.0, 10.0)
+				draw_texture_rect(start_screen_title_logo, shadow_rect_far, false, Color(0.0, 0.0, 0.0, 0.22))
+				var shadow_rect_near: Rect2 = logo_rect
+				shadow_rect_near.position += Vector2(4.0, 5.0)
+				draw_texture_rect(start_screen_title_logo, shadow_rect_near, false, Color(0.0, 0.0, 0.0, 0.34))
+				draw_texture_rect(start_screen_title_logo, logo_rect, false, Color(1.0, 1.0, 1.0, 1.0))
+			else:
+				var title_font: Font = start_menu_title_font if start_menu_title_font != null else card_font
+				var title_size: int = 74 if start_menu_title_font != null else 46
+				var title_text: String = "Halo Keepers"
+				var title_y: float = view_rect.position.y + view_rect.size.y * 0.31
+				draw_string(title_font, Vector2(view_rect.position.x + 6.0, title_y + 8.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.62))
+				draw_string(title_font, Vector2(view_rect.position.x + 3.0, title_y + 5.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.78))
+				draw_string(title_font, Vector2(view_rect.position.x + 1.0, title_y + 2.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.52))
+				draw_string(title_font, Vector2(view_rect.position.x, title_y), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.95, 0.83, 0.58, 0.98))
+		else:
+			var title_font: Font = start_menu_title_font if start_menu_title_font != null else card_font
+			var title_size: int = 74 if start_menu_title_font != null else 46
+			var title_text: String = "Halo Keepers"
+			var title_y: float = view_rect.position.y + view_rect.size.y * 0.31
+			# Layered shadow passes to separate title from the busy backdrop.
+			draw_string(title_font, Vector2(view_rect.position.x + 6.0, title_y + 8.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.62))
+			draw_string(title_font, Vector2(view_rect.position.x + 3.0, title_y + 5.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.78))
+			draw_string(title_font, Vector2(view_rect.position.x + 1.0, title_y + 2.0), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.0, 0.0, 0.0, 0.52))
+			draw_string(title_font, Vector2(view_rect.position.x, title_y), title_text, HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, title_size, Color(0.95, 0.83, 0.58, 0.98))
 
 		var button_rect_screen: Rect2 = _start_screen_button_rect()
+		var options_button_screen: Rect2 = _start_screen_options_button_rect()
 		var hover_screen: Vector2 = get_viewport().get_mouse_position()
 		var is_hover: bool = button_rect_screen.has_point(hover_screen)
 		var button_rect: Rect2 = _screen_rect_to_world(button_rect_screen)
@@ -2773,6 +4043,20 @@ func _draw() -> void:
 		draw_string(card_font, Vector2(button_rect.position.x + 2.0, start_base_y + 2.0), start_label, HORIZONTAL_ALIGNMENT_CENTER, button_rect.size.x, start_size, Color(0.0, 0.0, 0.0, 0.62))
 		draw_string(card_font, Vector2(button_rect.position.x, start_base_y), start_label, HORIZONTAL_ALIGNMENT_CENTER, button_rect.size.x, start_size, Color(0.98, 0.99, 1.0, 0.98))
 		draw_string(card_font, Vector2(view_rect.position.x, button_rect.end.y + 34.0), "Press ENTER or click Start", HORIZONTAL_ALIGNMENT_CENTER, view_rect.size.x, 20, Color(0.84, 0.92, 1.0, 0.8))
+
+		var options_hover: bool = options_button_screen.has_point(hover_screen)
+		var options_button: Rect2 = _screen_rect_to_world(options_button_screen)
+		draw_rect(options_button, Color(0.13, 0.19, 0.29, 0.94) if not options_hover else Color(0.2, 0.27, 0.38, 0.97), true)
+		draw_rect(options_button, Color(0.9, 0.95, 1.0, 0.78), false, 2.0)
+		var options_label: String = "OPTIONS"
+		var options_size: int = _fit_font_size_for_text(card_font, options_label, options_button.size.x - 22.0, 28, 16)
+		var options_base_y: float = _centered_text_baseline(options_button, card_font, options_size)
+		draw_string(card_font, Vector2(options_button.position.x + 2.0, options_base_y + 2.0), options_label, HORIZONTAL_ALIGNMENT_CENTER, options_button.size.x, options_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(card_font, Vector2(options_button.position.x, options_base_y), options_label, HORIZONTAL_ALIGNMENT_CENTER, options_button.size.x, options_size, Color(0.96, 0.99, 1.0, 0.98))
+
+		if options_menu_active:
+			var opt_title_font: Font = start_menu_title_font if start_menu_title_font != null else card_font
+			_draw_options_overlay(view_rect, opt_title_font, card_font)
 		return
 
 	if tutorial_screen_active:
@@ -3220,10 +4504,24 @@ func _draw() -> void:
 		var home_base_y: float = _centered_text_baseline(home_rect, button_font, home_size)
 		draw_string(button_font, Vector2(home_rect.position.x + 2.0, home_base_y + 2.0), home_label, HORIZONTAL_ALIGNMENT_CENTER, home_rect.size.x, home_size, Color(0.0, 0.0, 0.0, 0.62))
 		draw_string(button_font, Vector2(home_rect.position.x, home_base_y), home_label, HORIZONTAL_ALIGNMENT_CENTER, home_rect.size.x, home_size, Color(0.96, 0.99, 1.0, 0.98))
+
+		var options_screen: Rect2 = _pause_options_button_rect()
+		var options_hover: bool = options_screen.has_point(hover_screen)
+		var options_rect: Rect2 = _screen_rect_to_world(options_screen)
+		draw_rect(options_rect, Color(0.14, 0.2, 0.3, 0.94) if not options_hover else Color(0.22, 0.29, 0.41, 0.98), true)
+		draw_rect(options_rect, Color(0.9, 0.95, 1.0, 0.8), false, 2.0)
+		var options_label: String = "OPTIONS"
+		var options_size: int = _fit_font_size_for_text(button_font, options_label, options_rect.size.x - 20.0, 22, 14)
+		var options_base_y: float = _centered_text_baseline(options_rect, button_font, options_size)
+		draw_string(button_font, Vector2(options_rect.position.x + 2.0, options_base_y + 2.0), options_label, HORIZONTAL_ALIGNMENT_CENTER, options_rect.size.x, options_size, Color(0.0, 0.0, 0.0, 0.62))
+		draw_string(button_font, Vector2(options_rect.position.x, options_base_y), options_label, HORIZONTAL_ALIGNMENT_CENTER, options_rect.size.x, options_size, Color(0.96, 0.99, 1.0, 0.98))
 		var helper_text: String = "Press ESC to resume"
 		var helper_size: int = _fit_font_size_for_text(card_font, helper_text, panel.size.x - 20.0, 18, 13)
 		var helper_y: float = minf(view_rect.end.y - 16.0, home_rect.end.y + 30.0)
 		draw_string(card_font, Vector2(panel.position.x, helper_y), helper_text, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, helper_size, Color(0.84, 0.92, 1.0, 0.86))
+		if options_menu_active:
+			var opt_title_font: Font = start_menu_title_font if start_menu_title_font != null else button_font
+			_draw_options_overlay(view_rect, opt_title_font, card_font)
 		return
 
 func _draw_team_power_overlay() -> void:
@@ -3232,6 +4530,7 @@ func _draw_team_power_overlay() -> void:
 
 	_draw_team_links()
 	_draw_power_circle()
+	_draw_health_drops()
 	_draw_kill_flashes()
 
 func _draw_team_links() -> void:
@@ -3349,6 +4648,41 @@ func _draw_kill_flashes() -> void:
 			draw_line(p0, p1, Color(1.0, 0.9, 0.64, 0.82 * t), 2.0 + 1.8 * t, true)
 		draw_line(pos + Vector2(-draw_radius * 0.22, 0.0), pos + Vector2(draw_radius * 0.22, 0.0), Color(1.0, 0.95, 0.78, 0.88 * t), 2.2, true)
 		draw_line(pos + Vector2(0.0, -draw_radius * 0.22), pos + Vector2(0.0, draw_radius * 0.22), Color(1.0, 0.95, 0.78, 0.88 * t), 2.2, true)
+
+func _draw_health_drops() -> void:
+	if health_drops.is_empty():
+		return
+	var now_sec: float = float(Time.get_ticks_msec()) * 0.001
+	var use_sheet: bool = health_drop_sheet != null and health_drop_frame_size.x > 0.0 and health_drop_frame_size.y > 0.0
+	for drop: Dictionary in health_drops:
+		var pos_variant: Variant = drop.get("position", Vector2.ZERO)
+		var pos: Vector2 = pos_variant if pos_variant is Vector2 else Vector2.ZERO
+		var radius: float = float(drop.get("radius", 6.0))
+		var life: float = float(drop.get("life", HEALTH_DROP_LIFETIME))
+		var pulse_phase: float = float(drop.get("pulse", 0.0))
+		var life_t: float = clampf(life / HEALTH_DROP_LIFETIME, 0.0, 1.0)
+		var pulse: float = 1.0 + sin(now_sec * 3.8 + pulse_phase) * 0.12
+		var r: float = radius * pulse
+		var halo_alpha: float = 0.12 + 0.1 * life_t
+		draw_circle(pos, r + 4.4, Color(0.54, 1.0, 0.56, halo_alpha))
+		if use_sheet:
+			var frame_count: int = max(1, HEALTH_DROP_SHEET_FRAME_COUNT)
+			var frame_idx: int = int(floor(now_sec * HEALTH_DROP_SHEET_FPS + pulse_phase * 0.8)) % frame_count
+			var src_x: float = float(frame_idx) * health_drop_frame_size.x
+			var src_rect: Rect2 = Rect2(src_x, 0.0, health_drop_frame_size.x, health_drop_frame_size.y)
+			var sprite_scale: float = HEALTH_DROP_SHEET_BASE_SCALE + radius * 0.038
+			sprite_scale *= 0.95 + pulse * 0.11
+			var draw_size: Vector2 = health_drop_frame_size * sprite_scale
+			var draw_rect: Rect2 = Rect2(pos - draw_size * 0.5, draw_size)
+			draw_texture_rect_region(health_drop_sheet, draw_rect, src_rect, Color(1.0, 1.0, 1.0, 0.8 + life_t * 0.2), false)
+		else:
+			var core_alpha: float = 0.34 + 0.3 * life_t
+			draw_circle(pos, r + 1.8, Color(0.72, 1.0, 0.76, core_alpha * 0.7))
+			draw_circle(pos, r, Color(0.89, 1.0, 0.9, core_alpha))
+			var cross_half: float = r * 0.44
+			var cross_thickness: float = 1.2 + r * 0.08
+			draw_line(pos + Vector2(-cross_half, 0.0), pos + Vector2(cross_half, 0.0), Color(0.2, 0.7, 0.24, 0.92), cross_thickness, true)
+			draw_line(pos + Vector2(0.0, -cross_half), pos + Vector2(0.0, cross_half), Color(0.2, 0.7, 0.24, 0.92), cross_thickness, true)
 
 func _draw_spectral_halo() -> void:
 	if not spectral_halo_unlocked:

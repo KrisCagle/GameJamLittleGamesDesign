@@ -19,6 +19,10 @@ run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.6")
 config/icon="res://icon.svg"
 
+[audio]
+
+driver/output_latency=15
+
 [display]
 
 window/size/viewport_width=1280
